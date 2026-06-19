@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 import src.core.recorder_polling as rp
-from src.core.recorder_polling import PollingRecorder, diff_to_acoes
+from src.core.recorder_polling import PollingRecorder, collect_shells, diff_to_acoes
+from tests.conftest import FakeComponent
 
 
 # --------------------------------------------------------------------------- #
@@ -108,3 +109,43 @@ def test_poll_once_sem_mudanca_nao_emite(monkeypatch: Any) -> None:
     rec.poll_once(emit=False)
     assert rec.poll_once(emit=True) == []
     assert capturadas == []
+
+
+# --------------------------------------------------------------------------- #
+# collect_shells — descoberta de GuiShell na árvore
+# --------------------------------------------------------------------------- #
+class _Coll:
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.Count = len(self._items)
+
+    def ElementAt(self, i: int) -> Any:
+        return self._items[i]
+
+
+def test_collect_shells_encontra_grid() -> None:
+    grid = FakeComponent(Id="wnd[0]/usr/cntlGRID1/shellcont/shell", Type="GuiGridView")
+    session = FakeComponent(Id="ses[0]", Type="GuiSession", Children=_Coll([grid]))
+    # find_by_id é chamado pelo Analyser interno; resolvemos o próprio grid.
+    session.FindById = lambda oid, *a: grid if oid == grid.Id else None  # type: ignore[attr-defined]
+    pares = collect_shells(session)
+    assert pares == [(grid.Id, grid)]
+
+
+def test_collect_shells_sessao_sem_shell() -> None:
+    # Objeto sem árvore navegável → nenhum shell, sem exceção.
+    assert collect_shells(object()) == []
+
+
+# --------------------------------------------------------------------------- #
+# PollingRecorder — ciclo de vida da thread
+# --------------------------------------------------------------------------- #
+def test_start_stop_thread() -> None:
+    rec = PollingRecorder(session=object(), sink=lambda _a: None, poll_interval=0.01)
+    assert rec.is_running is False
+    rec.start()
+    assert rec.is_running is True
+    rec.start()  # no-op quando já rodando
+    rec.stop()
+    assert rec.is_running is False
+    rec.stop()  # idempotente

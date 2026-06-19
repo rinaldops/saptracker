@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from src.core.recorder_win32 import Win32Recorder, classnn_map, dialog_to_acao
@@ -70,3 +71,75 @@ def test_dialogo_fechado_e_reaberto_recaptura(monkeypatch: Any) -> None:
     monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [7])  # reabriu (handle reciclado)
     rec.scan_once()
     assert len(capturadas) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Ciclo de vida da thread
+# --------------------------------------------------------------------------- #
+def test_start_no_op_sem_win32(monkeypatch: Any) -> None:
+    rec = Win32Recorder(sink=lambda _a: None)
+    monkeypatch.setattr(rec, "_win32_available", lambda: False)
+    rec.start()
+    assert rec.is_running is False
+
+
+def test_start_stop_thread(monkeypatch: Any) -> None:
+    rec = Win32Recorder(sink=lambda _a: None, scan_interval=0.01)
+    monkeypatch.setattr(rec, "_win32_available", lambda: True)
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [])  # nenhuma janela
+    rec.start()
+    assert rec.is_running is True
+    rec.start()  # no-op quando já rodando
+    rec.stop()
+    assert rec.is_running is False
+
+
+# --------------------------------------------------------------------------- #
+# Camada win32gui (módulo falso injetado em sys.modules)
+# --------------------------------------------------------------------------- #
+class _FakeWin32Gui:
+    """``win32gui`` falso com um diálogo ``#32770`` e seus filhos."""
+
+    def __init__(self) -> None:
+        # hwnd -> classe (janelas de topo + filhos)
+        self._classes = {100: "#32770", 200: "Notepad", 1: "Static", 2: "Edit", 3: "Button"}
+        self._titles = {100: "Salvar como", 1: "", 2: "C:\\saida.txt", 3: "Salvar"}
+        self._children = {100: [1, 2, 3]}
+
+    def IsWindowVisible(self, hwnd: int) -> bool:
+        return True
+
+    def GetClassName(self, hwnd: int) -> str:
+        return self._classes.get(hwnd, "")
+
+    def GetWindowText(self, hwnd: int) -> str:
+        return self._titles.get(hwnd, "")
+
+    def EnumWindows(self, cb: Any, extra: Any) -> None:
+        for hwnd in (100, 200):
+            cb(hwnd, extra)
+
+    def EnumChildWindows(self, hwnd: int, cb: Any, extra: Any) -> None:
+        for child in self._children.get(hwnd, []):
+            cb(child, extra)
+
+
+def test_enumerate_dialogs_filtra_classe_32770(monkeypatch: Any) -> None:
+    monkeypatch.setitem(sys.modules, "win32gui", _FakeWin32Gui())
+    rec = Win32Recorder(sink=lambda _a: None)
+    assert rec._enumerate_dialogs() == [100]  # ignora a janela Notepad
+
+
+def test_capture_extrai_titulo_edits_e_botao(monkeypatch: Any) -> None:
+    monkeypatch.setitem(sys.modules, "win32gui", _FakeWin32Gui())
+    rec = Win32Recorder(sink=lambda _a: None)
+    acao = rec._capture(100)
+    assert acao is not None
+    assert acao.args["title"] == "Salvar como"
+    assert acao.args["controls"] == [{"control": "Edit1", "text": "C:\\saida.txt"}]
+    assert acao.args["button"] == "Button1"
+
+
+def test_win32_available_retorna_bool() -> None:
+    rec = Win32Recorder(sink=lambda _a: None)
+    assert isinstance(rec._win32_available(), bool)

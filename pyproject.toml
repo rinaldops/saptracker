@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sap-scripting-tool"
+version = "1.0.0"
+description = "SAP GUI Scripting Tool — Analyser, Recorder e Gerador de Código"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "SAP GUI Scripting Tool Contributors" }]
+keywords = ["sap", "sap-gui", "scripting", "automation", "recorder", "codegen"]
+dependencies = [
+    "PyQt6>=6.6",
+    "PyQt6-QScintilla>=2.14",
+    "pywin32>=306; sys_platform == 'win32'",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-qt>=4", "pytest-cov", "ruff", "mypy"]
+build = ["pyinstaller>=6"]
+
+[project.scripts]
+sap-scripting-tool = "src.main:main"
+
+[project.urls]
+Homepage = "https://github.com/example/sap-scripting-tool"
+Issues = "https://github.com/example/sap-scripting-tool/issues"
+
+[tool.setuptools]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "ANN", "B", "C4"]
+ignore = ["ANN401"]  # permite Any em pontos de fronteira COM
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "S101"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "sap_live: testes que exigem um SAP GUI real conectado (desabilitados por padrão)",
+]
+
+[tool.coverage.run]
+source = ["src/core", "src/codegen"]
+omit = ["*/__init__.py"]

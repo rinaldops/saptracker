@@ -40,7 +40,7 @@ class RecorderTab(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
 
-        title = QLabel("Recorder")
+        title = QLabel("Gravador")
         title.setObjectName("title")
         layout.addWidget(title)
 

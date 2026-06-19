@@ -6,6 +6,31 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido
+- **GuiShell não era reconhecido pelo SubType real do SAP.** Os controles
+  reportam `Type == "GuiShell"` e o tipo em `SubType` **sem o prefixo `Gui`**
+  (ex.: `"Tree"`, `"GridView"`) — a resolução só casava `"GuiTree"`, então caía
+  no handler genérico (`introspeccao: false`). Adicionado `normalize_shell_type`
+  (alias + prefixo `Gui`), usado por `get_handler` e pelo Analyser. *Verificado
+  contra um SAP real: GuiTree de 25 nós passou a listar a hierarquia.*
+- **Conteúdo de GuiShell agora é listado na árvore do Analyser.** Colunas e
+  linhas de `GuiGridView`, hierarquia de `GuiTree`, linhas de `GuiTextEdit`,
+  botões de `GuiToolbarControl` e dados de `GuiCalendar` aparecem como nós-filhos
+  do controle (antes só surgiam no painel de detalhes). O conteúdo completo
+  continua no painel; a árvore mostra uma amostra de até 50 itens por shell.
+- **Leitura de coleções COM robustecida** (`com_len`/`com_item`): aceita tanto
+  `Count` quanto `Length`, e `ElementAt`/`Item`, cobrindo as variações de
+  `GuiComponentCollection` e `GuiCollection`.
+
+### Adicionado (diagnóstico)
+- **Log em arquivo por padrão**: `%LOCALAPPDATA%/SAPScriptingTool/logs/sap_tool.log`
+  (nível DEBUG). Nível do console via `SAPTOOL_LOG_LEVEL` (ex.: `DEBUG`).
+- Logging detalhado no Analyser: detecção de cada shell (Type/SubType/tipo
+  resolvido/suportado), resumo da árvore e contagem de nós de conteúdo por shell.
+- `get_handler` passa a resolver controles que reportam `Type == "GuiShell"`
+  pelo `SubType` (ex.: `GuiGridView`), garantindo introspecção rica também no
+  painel de detalhes e no *polling* do Recorder.
+
 ### Adicionado
 - Abas **API Reference** (referência pesquisável da API SAP GUI Scripting) e
   **Notas** (bloco de anotações com copiar/abrir/salvar) na janela principal.

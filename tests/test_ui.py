@@ -16,7 +16,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PyQt6")
 
+from PyQt6.QtCore import Qt  # noqa: E402
+
 from src.codegen import Acao  # noqa: E402
+from src.core.sap_connection import SessionInfo  # noqa: E402
 from src.ui.code_editor import CodeEditor  # noqa: E402
 from src.ui.context import AppContext  # noqa: E402
 from src.ui.main_window import MainWindow  # noqa: E402
@@ -34,10 +37,10 @@ def test_abas(janela) -> None:  # type: ignore[no-untyped-def]
     titulos = [janela.tabs.tabText(i) for i in range(janela.tabs.count())]
     assert titulos == [
         "Conexão",
-        "Analyser",
-        "Recorder",
+        "Analisador",
+        "Gravador",
         "Código",
-        "API Reference",
+        "Referência da API",
         "Notas",
     ]
 
@@ -128,3 +131,138 @@ def test_context_start_recording_sem_sessao_falha() -> None:
     ctx = AppContext()
     assert ctx.start_recording() is False
     assert not ctx.is_recording
+
+
+class _FakeAnalyser:
+    """Analisador falso: árvore pronta + registro de chamadas de highlight."""
+
+    def __init__(self, root, on_build=None) -> None:  # type: ignore[no-untyped-def]
+        self._root = root
+        self._on_build = on_build
+        self.highlights: list[tuple[str, bool]] = []
+
+    def build_tree(self):  # type: ignore[no-untyped-def]
+        if self._on_build is not None:
+            self._on_build()
+        return self._root
+
+    def inspect(self, obj_id: str) -> dict:
+        return {"id": obj_id}
+
+    def highlight(self, obj_id: str, *, on: bool = True) -> bool:
+        self.highlights.append((obj_id, on))
+        return True
+
+
+def _arvore_exemplo():  # type: ignore[no-untyped-def]
+    from src.core.analyser import ObjectNode
+
+    return ObjectNode(
+        id="r",
+        type="GuiSession",
+        children=[
+            ObjectNode(id="a", type="GuiButton", name="BTN_SAVE", text="Salvar"),
+            ObjectNode(id="b", type="GuiLabel", text="Salvar como"),
+        ],
+    )
+
+
+def _preparar_analyser_tab(janela, fake):  # type: ignore[no-untyped-def]
+    aba = janela.analyser_tab
+    janela.ctx.session = object()  # has_session True, sem disparar sessionChanged
+    aba._analyser = fake
+    aba.analyse()
+    return aba
+
+
+def test_highlight_e_removido_ao_soltar_botao(janela, qtbot) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeAnalyser(_arvore_exemplo())
+    aba = _preparar_analyser_tab(janela, fake)
+    raiz = aba.tree.topLevelItem(0)
+
+    aba.tree.setCurrentItem(raiz.child(0))  # objeto "a"
+    qtbot.mousePress(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    assert fake.highlights == [("a", True)]
+    qtbot.mouseRelease(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    assert fake.highlights == [("a", True), ("a", False)]
+
+    aba.tree.setCurrentItem(raiz.child(1))  # objeto "b"
+    qtbot.mousePress(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    qtbot.mouseRelease(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    assert fake.highlights[-1] == ("b", False)
+    assert aba._highlighted_id == ""
+
+
+def test_busca_cicla_pelos_resultados(janela) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeAnalyser(_arvore_exemplo())
+    aba = _preparar_analyser_tab(janela, fake)
+
+    aba.search.setText("salvar")
+    aba.find_next()
+    primeiro = aba.tree.currentItem()
+    aba.find_next()
+    segundo = aba.tree.currentItem()
+    assert primeiro is not segundo  # dois resultados distintos
+    aba.find_next()
+    assert aba.tree.currentItem() is primeiro  # cicla de volta ao início
+
+
+def test_busca_sem_resultado_nao_quebra(janela) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeAnalyser(_arvore_exemplo())
+    aba = _preparar_analyser_tab(janela, fake)
+    aba.search.setText("inexistente-xyz")
+    aba.find_next()
+    assert aba.tree.currentItem() is None
+
+
+def test_busca_considera_nome_nao_exibido(janela) -> None:  # type: ignore[no-untyped-def]
+    fake = _FakeAnalyser(_arvore_exemplo())
+    aba = _preparar_analyser_tab(janela, fake)
+    aba.search.setText("btn_save")
+    aba.find_next()
+    assert aba.tree.currentItem().data(0, Qt.ItemDataRole.UserRole) == "a"
+
+
+def test_analyse_exibe_estado_de_processamento(janela) -> None:  # type: ignore[no-untyped-def]
+    estados: list[tuple[bool, bool, str]] = []
+    aba = janela.analyser_tab
+    fake = _FakeAnalyser(
+        _arvore_exemplo(),
+        lambda: estados.append(
+            (
+                not aba.analysis_status.isHidden(),
+                not aba.analysis_progress.isHidden(),
+                aba.btn_analyse.text(),
+            )
+        ),
+    )
+    _preparar_analyser_tab(janela, fake)
+    assert estados == [(True, True, "Analisando…")]
+    assert not aba.analysis_status.isVisible()
+    assert not aba.analysis_progress.isVisible()
+    assert aba.btn_analyse.text() == "Analisar sessão"
+
+
+class _FakeConnection:
+    def __init__(self) -> None:
+        self.session = FakeSession()
+
+    def ensure_connected(self) -> None:
+        return None
+
+    def list_sessions_info(self):  # type: ignore[no-untyped-def]
+        return [SessionInfo(0, 0, "PRD", "100", "TESTER", "SE16", "Consulta")]
+
+    def get_session(self, connection_index: int, session_index: int):  # type: ignore[no-untyped-def]
+        assert (connection_index, session_index) == (0, 0)
+        return self.session
+
+
+def test_conexao_lista_e_marca_sessao_ativa(qtbot) -> None:  # type: ignore[no-untyped-def]
+    conexao = _FakeConnection()
+    win = MainWindow(connection=conexao)
+    qtbot.addWidget(win)
+    win.connection_tab.refresh_sessions()
+    assert win.ctx.session is conexao.session
+    assert "CONECTADO" in win.connection_tab.lista.item(0).text()
+    assert win.connection_tab.status.text().startswith("Conectado:")

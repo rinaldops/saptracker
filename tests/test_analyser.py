@@ -39,6 +39,32 @@ class FakeTextEditObj:
         return True
 
 
+class FakeGridObj:
+    """``GuiGridView`` introspectável, usado como folha de uma árvore."""
+
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+    Name = "GRID1"
+    Text = "Resultado"
+
+    def __init__(self, type_: str = "GuiGridView", subtype: str = "") -> None:
+        self.Type = type_
+        if subtype:
+            self.SubType = subtype
+        self._cols = ["MATNR", "MENGE"]
+        self._rows = [{"MATNR": "MAT001", "MENGE": "10"}, {"MATNR": "MAT002", "MENGE": "5"}]
+        self.RowCount = len(self._rows)
+        self.CurrentCellRow = -1
+        self.CurrentCellColumn = ""
+        self.SelectedRows = ""
+        self.FirstVisibleRow = 0
+
+    def GetColumnOrder(self) -> FakeColl:
+        return FakeColl(self._cols)
+
+    def GetCellValue(self, r: int, col: str) -> str:
+        return self._rows[r].get(col, "")
+
+
 # --------------------------------------------------------------------------- #
 # build_tree / ObjectNode
 # --------------------------------------------------------------------------- #
@@ -99,6 +125,58 @@ def test_build_tree_tolera_session_vazia() -> None:
     vazia = FakeComponent(Id="ses[0]", Type="GuiSession")  # sem Children
     root = Analyser(vazia).build_tree()
     assert root.children == []
+
+
+# --------------------------------------------------------------------------- #
+# Conteúdo interno de GuiShell listado na árvore (requisito-diferencial)
+# --------------------------------------------------------------------------- #
+def _session_com_grid(grid: Any) -> Any:
+    janela = FakeComponent(Id="wnd[0]", Type="GuiFrameWindow", Children=FakeColl([grid]))
+    return FakeComponent(Id="ses[0]", Type="GuiSession", Children=FakeColl([janela]))
+
+
+def test_arvore_lista_conteudo_do_grid() -> None:
+    grid = FakeGridObj()
+    root = Analyser(_session_com_grid(grid)).build_tree()
+    grid_node = root.children[0].children[0]
+    assert grid_node.type == "GuiGridView"
+    # O conteúdo interno (colunas e linhas) vira filho do nó do shell.
+    tipos = {c.type for c in grid_node.children}
+    assert tipos == {"GuiGridColumns", "GuiGridRows"}
+
+    colunas = next(c for c in grid_node.children if c.type == "GuiGridColumns")
+    assert [c.text for c in colunas.children] == ["MATNR", "MENGE"]
+
+    linhas = next(c for c in grid_node.children if c.type == "GuiGridRows")
+    assert linhas.children[0].text == "[0] MAT001 | 10"
+    # Nós sintéticos herdam o id do shell (selecionar mostra detalhes do controle).
+    assert colunas.children[0].id == grid.Id
+
+
+def test_arvore_resolve_grid_reportado_como_guishell() -> None:
+    # Controle que reporta Type genérico "GuiShell" e tipo real em SubType.
+    grid = FakeGridObj(type_="GuiShell", subtype="GuiGridView")
+    root = Analyser(_session_com_grid(grid)).build_tree()
+    grid_node = root.children[0].children[0]
+    assert grid_node.type == "GuiGridView"
+    assert grid_node.shell_supported is True
+    assert any(c.type == "GuiGridColumns" for c in grid_node.children)
+
+
+def test_shell_content_nodes_tree_reconstroi_hierarquia() -> None:
+    analyser = Analyser(object())
+    data = {
+        "nos": [
+            {"chave": "r", "texto": "Raiz", "filhos": ["a", "b"]},
+            {"chave": "a", "texto": "A", "filhos": []},
+            {"chave": "b", "texto": "B", "filhos": []},
+        ]
+    }
+    roots = analyser._shell_content_nodes("GuiTree", data, "shellid")
+    assert len(roots) == 1  # só a raiz no topo
+    raiz = roots[0]
+    assert raiz.text == "r: Raiz"
+    assert [c.name for c in raiz.children] == ["a", "b"]
 
 
 def test_object_node_defaults() -> None:

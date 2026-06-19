@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.core.com_utils import safe_com_call, safe_get
+from src.core.com_utils import com_item, com_len, safe_com_call, safe_get
 from src.core.shell_handlers.base import GuiShellHandler, Lang
 
 
@@ -28,24 +28,20 @@ class GuiTreeHandler(GuiShellHandler):
         """Retorna as chaves de todos os nós carregados no controle."""
         keys = safe_com_call(lambda: obj.GetAllNodeKeys())
         result: list[str] = []
-        if keys is not None:
-            count = int(safe_get(keys, "Count", 0) or 0)
-            for i in range(min(count, self.max_nodes)):
-                k = safe_com_call(keys.ElementAt, i)
-                if k is not None:
-                    result.append(str(k))
+        for i in range(min(com_len(keys), self.max_nodes)):
+            k = com_item(keys, i)
+            if k is not None:
+                result.append(str(k))
         return result
 
     def _column_names(self, obj: Any) -> list[str]:
         """Retorna nomes de coluna (apenas para column trees)."""
         cols = safe_com_call(lambda: obj.GetColumnNames())
         names: list[str] = []
-        if cols is not None:
-            count = int(safe_get(cols, "Count", 0) or 0)
-            for i in range(count):
-                c = safe_com_call(cols.ElementAt, i)
-                if c is not None:
-                    names.append(str(c))
+        for i in range(com_len(cols)):
+            c = com_item(cols, i)
+            if c is not None:
+                names.append(str(c))
         return names
 
     def inspecionar(self, obj: Any) -> dict[str, Any]:
@@ -58,12 +54,10 @@ class GuiTreeHandler(GuiShellHandler):
             text = safe_com_call(obj.GetNodeTextByKey, key, default="")
             children = safe_com_call(obj.GetSubNodesCol, key)
             child_keys: list[str] = []
-            if children is not None:
-                ccount = int(safe_get(children, "Count", 0) or 0)
-                for i in range(ccount):
-                    ck = safe_com_call(children.ElementAt, i)
-                    if ck is not None:
-                        child_keys.append(str(ck))
+            for i in range(com_len(children)):
+                ck = com_item(children, i)
+                if ck is not None:
+                    child_keys.append(str(ck))
             item_values: dict[str, str] = {}
             for col in colunas:
                 val = safe_com_call(obj.GetItemText, key, col, default="")
@@ -89,11 +83,9 @@ class GuiTreeHandler(GuiShellHandler):
     def _selected_key(self, obj: Any) -> str:
         """Retorna a chave do nó atualmente selecionado, se houver."""
         selected = safe_com_call(lambda: obj.GetSelectedNodes())
-        if selected is not None:
-            count = int(safe_get(selected, "Count", 0) or 0)
-            if count:
-                first = safe_com_call(selected.ElementAt, 0)
-                return "" if first is None else str(first)
+        if com_len(selected):
+            first = com_item(selected, 0)
+            return "" if first is None else str(first)
         # Fallback: topNode/selectedNode dependem do subtype.
         return str(safe_get(obj, "selectedNode", "") or "")
 

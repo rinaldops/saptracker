@@ -42,6 +42,10 @@ class ConnectionTab(QWidget):
         botoes.addStretch(1)
         layout.addLayout(botoes)
 
+        dica = QLabel("Clique em uma sessão da lista para usá-la nas demais abas.")
+        dica.setObjectName("hint")
+        layout.addWidget(dica)
+
         self.lista = QListWidget()
         self.lista.itemSelectionChanged.connect(self._on_select)
         layout.addWidget(self.lista, 1)
@@ -67,11 +71,26 @@ class ConnectionTab(QWidget):
             return
 
         for info in self._sessions:
-            label = f"{info.label}  |  {info.transaction or '—'}  |  {info.title}"
-            item = QListWidgetItem(label)
-            self.lista.addItem(item)
+            self.lista.addItem(QListWidgetItem(self._base_label(info)))
         self.status.setText(f"{len(self._sessions)} sessão(ões) encontrada(s).")
+        # Seleciona a primeira: o _on_select estabelece a conexão e marca em uso.
         self.lista.setCurrentRow(0)
+
+    @staticmethod
+    def _base_label(info: SessionInfo) -> str:
+        """Rótulo de uma sessão na lista (sem o marcador de uso)."""
+        return f"{info.label}  |  {info.transaction or '—'}  |  {info.title}"
+
+    def _mark_active(self, active_row: int) -> None:
+        """Marca visualmente qual sessão está em uso pela aplicação."""
+        for i, info in enumerate(self._sessions):
+            item = self.lista.item(i)
+            if item is None:
+                continue
+            prefix = "✓ CONECTADO  —  " if i == active_row else "•  "
+            item.setText(prefix + self._base_label(info))
+        info = self._sessions[active_row]
+        self.status.setText(f"Conectado: {info.label}  ({info.transaction or '—'}).")
 
     def _on_select(self) -> None:
         """Define a sessão escolhida no contexto da aplicação."""
@@ -87,3 +106,4 @@ class ConnectionTab(QWidget):
             self.status.setText(f"Erro ao abrir sessão: {e}")
             return
         self._ctx.set_session(session)
+        self._mark_active(row)

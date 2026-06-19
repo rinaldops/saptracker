@@ -59,7 +59,7 @@ class CodeTab(QWidget):
 
     def copy(self) -> None:
         if copy_text(self.editor.text()):
-            self._ctx.statusMessage.emit("Código copiado para o clipboard.")
+            self._ctx.statusMessage.emit("Código copiado para a área de transferência.")
 
     def save(self) -> None:
         ext = get_generator(self._language).file_extension

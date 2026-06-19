@@ -7,7 +7,8 @@ ou o objeto deixar de existir. Estes helpers padronizam o tratamento de erro
 
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from src.utils.logger import get_logger
 

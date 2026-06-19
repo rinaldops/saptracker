@@ -46,7 +46,7 @@ class ObjectNode:
     height: int = 0
     is_shell: bool = False
     shell_supported: bool = False
-    children: list["ObjectNode"] = field(default_factory=list)
+    children: list[ObjectNode] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Serializa o nó (e subárvore) para um dicionário JSON-friendly."""
@@ -64,7 +64,7 @@ class ObjectNode:
             "children": [c.to_dict() for c in self.children],
         }
 
-    def flatten(self) -> list["ObjectNode"]:
+    def flatten(self) -> list[ObjectNode]:
         """Retorna todos os nós da subárvore em pré-ordem (inclui ``self``)."""
         result = [self]
         for child in self.children:

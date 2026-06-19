@@ -8,8 +8,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 def to_json(data: Any, *, indent: int = 2) -> str:

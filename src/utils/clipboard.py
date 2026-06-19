@@ -26,14 +26,13 @@ def copy_text(text: str) -> bool:
 def _copy_via_qt(text: str) -> bool:
     """Tenta copiar usando o clipboard do Qt (se houver QApplication)."""
     try:
-        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtGui import QGuiApplication
     except ImportError:
         return False
 
-    app = QApplication.instance()
-    if app is None:
+    if QGuiApplication.instance() is None:
         return False
-    clipboard = app.clipboard()
+    clipboard = QGuiApplication.clipboard()
     if clipboard is None:
         return False
     clipboard.setText(text)

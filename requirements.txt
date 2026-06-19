@@ -1,0 +1,4 @@
+PyQt6>=6.6
+PyQt6-QScintilla>=2.14
+pywin32>=306; sys_platform == "win32"
+jinja2>=3.1

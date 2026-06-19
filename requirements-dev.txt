@@ -1,0 +1,7 @@
+-r requirements.txt
+pytest>=7
+pytest-qt>=4
+pytest-cov
+ruff
+mypy
+pyinstaller>=6

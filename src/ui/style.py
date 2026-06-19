@@ -45,6 +45,12 @@ QTreeWidget, QListWidget, QTableWidget, QTextEdit, QPlainTextEdit {
     border: 1px solid #313640;
     selection-background-color: #2f7be0;
 }
+QTreeWidget::item { padding: 3px; }
+QTreeWidget::item:selected,
+QTreeWidget::item:selected:!active {
+    background-color: #5aa2ff;
+    color: #ffffff;
+}
 QHeaderView::section {
     background-color: #262b33;
     padding: 4px;

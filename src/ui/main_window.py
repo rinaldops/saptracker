@@ -1,4 +1,4 @@
-"""Janela principal — monta as quatro abas sobre um :class:`AppContext`."""
+"""Janela principal — monta as abas sobre um :class:`AppContext`."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, connection: SapConnection | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("SAP GUI Scripting Tool")
+        self.setWindowTitle("Ferramenta de Automação do SAP GUI")
         self.resize(1100, 720)
 
         self.ctx = AppContext(connection)
@@ -43,10 +43,10 @@ class MainWindow(QMainWindow):
         self.notes_tab = NotesTab(self.ctx)
 
         self.tabs.addTab(self.connection_tab, "Conexão")
-        self.tabs.addTab(self.analyser_tab, "Analyser")
-        self.tabs.addTab(self.recorder_tab, "Recorder")
+        self.tabs.addTab(self.analyser_tab, "Analisador")
+        self.tabs.addTab(self.recorder_tab, "Gravador")
         self.tabs.addTab(self.code_tab, "Código")
-        self.tabs.addTab(self.api_ref_tab, "API Reference")
+        self.tabs.addTab(self.api_ref_tab, "Referência da API")
         self.tabs.addTab(self.notes_tab, "Notas")
         self.setCentralWidget(self.tabs)
 

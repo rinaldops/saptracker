@@ -196,7 +196,7 @@ class ApiRefTab(QWidget):
         layout = QVBoxLayout(self)
 
         topo = QHBoxLayout()
-        titulo = QLabel("API Reference")
+        titulo = QLabel("Referência da API")
         titulo.setObjectName("title")
         topo.addWidget(titulo)
         topo.addStretch(1)

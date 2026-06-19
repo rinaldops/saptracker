@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.core.com_utils import safe_com_call, safe_get
+from src.core.com_utils import com_item, com_len, safe_com_call, safe_get
 from src.core.shell_handlers.base import GuiShellHandler, Lang
 
 
@@ -29,22 +29,18 @@ class GuiGridViewHandler(GuiShellHandler):
         """Retorna os nomes técnicos das colunas do grid."""
         col_collection = safe_com_call(lambda: obj.GetColumnOrder())
         names: list[str] = []
-        if col_collection is not None:
-            count = int(safe_get(col_collection, "Count", 0) or 0)
-            for i in range(count):
-                name = safe_com_call(col_collection.ElementAt, i)
-                if name is not None:
-                    names.append(str(name))
+        for i in range(com_len(col_collection)):
+            name = com_item(col_collection, i)
+            if name is not None:
+                names.append(str(name))
         if names:
             return names
         # Fallback: GetColumnNames retorna uma coleção de nomes técnicos.
         col_names = safe_com_call(lambda: obj.GetColumnNames())
-        if col_names is not None:
-            count = int(safe_get(col_names, "Count", 0) or 0)
-            for i in range(count):
-                name = safe_com_call(col_names.ElementAt, i)
-                if name is not None:
-                    names.append(str(name))
+        for i in range(com_len(col_names)):
+            name = com_item(col_names, i)
+            if name is not None:
+                names.append(str(name))
         return names
 
     def inspecionar(self, obj: Any) -> dict[str, Any]:

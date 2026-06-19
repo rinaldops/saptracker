@@ -61,6 +61,15 @@ QComboBox QAbstractItemView {
     selection-background-color: #2f7be0;
 }
 QLabel#title { font-size: 16px; font-weight: bold; }
+QLabel#hint { color: #9aa0aa; font-style: italic; }
+QLabel#processing { color: #7fb2ff; font-weight: bold; }
+QProgressBar {
+    background-color: #171a1f;
+    border: 1px solid #313640;
+    border-radius: 3px;
+    max-height: 8px;
+}
+QProgressBar::chunk { background-color: #2f7be0; }
 QStatusBar { background-color: #262b33; }
 """
 

@@ -59,3 +59,41 @@ def safe_get(obj: Any, attr: str, default: Any = None) -> Any:
 def is_com_error(exc: BaseException) -> bool:
     """Indica se ``exc`` é um erro originado do subsistema COM."""
     return isinstance(exc, (_COMError, AttributeError))
+
+
+def com_len(collection: Any) -> int:
+    """Retorna o número de elementos de uma coleção COM do SAP GUI.
+
+    O SAP expõe o tamanho de formas diferentes conforme o tipo de coleção:
+    ``GuiComponentCollection`` (ex.: ``Children``) usa ``Count``, enquanto as
+    coleções retornadas por métodos como ``GetAllNodeKeys`` /
+    ``GetColumnNames`` (``GuiCollection``) usam ``Length``. Tenta ambos.
+    """
+    if collection is None:
+        return 0
+    for attr in ("Count", "Length"):
+        value = safe_get(collection, attr, None)
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
+def com_item(collection: Any, index: int, default: Any = None) -> Any:
+    """Retorna o elemento ``index`` de uma coleção COM, tolerante à API.
+
+    Tenta ``ElementAt(index)`` (SAP), depois ``Item(index)`` e, por fim, o
+    indexador padrão ``collection(index)``. Retorna ``default`` se nada servir.
+    """
+    if collection is None:
+        return default
+    for method in ("ElementAt", "Item"):
+        func = safe_get(collection, method, None)
+        if callable(func):
+            value = safe_com_call(func, index)
+            if value is not None:
+                return value
+    value = safe_com_call(lambda: collection(index))
+    return default if value is None else value

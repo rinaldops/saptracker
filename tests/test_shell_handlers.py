@@ -17,6 +17,7 @@ from src.core.shell_handlers import (
     get_handler,
     get_handler_for_type,
     is_supported_shell,
+    normalize_shell_type,
 )
 from src.core.shell_handlers.calendar import GuiCalendarHandler
 from src.core.shell_handlers.generic import GuiShellGenerico
@@ -80,8 +81,19 @@ class FakeGrid:
         return True
 
 
+class FakeColLength:
+    """Coleção estilo ``GuiCollection`` real do SAP: usa ``Length``, não ``Count``."""
+
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.Length = len(self._items)
+
+    def ElementAt(self, i: int) -> Any:
+        return self._items[i]
+
+
 class FakeTree:
-    """``GuiTree`` falso."""
+    """``GuiTree`` falso. Coleções usam ``Length`` (como o SAP real)."""
 
     Type = "GuiTree"
 
@@ -96,24 +108,24 @@ class FakeTree:
         self._columns = columns or []
         self._selected = selected or []
 
-    def GetAllNodeKeys(self) -> FakeCol:
-        return FakeCol(list(self._nodes))
+    def GetAllNodeKeys(self) -> FakeColLength:
+        return FakeColLength(list(self._nodes))
 
-    def GetColumnNames(self) -> FakeCol:
-        return FakeCol(self._columns)
+    def GetColumnNames(self) -> FakeColLength:
+        return FakeColLength(self._columns)
 
     def GetNodeTextByKey(self, key: str) -> str:
         return self._nodes[key].get("texto", "")
 
-    def GetSubNodesCol(self, key: str) -> FakeCol | None:
+    def GetSubNodesCol(self, key: str) -> FakeColLength | None:
         filhos = self._nodes[key].get("filhos")
-        return FakeCol(filhos) if filhos else None
+        return FakeColLength(filhos) if filhos else None
 
     def GetItemText(self, key: str, col: str) -> str:
         return self._nodes[key].get("cols", {}).get(col, "")
 
-    def GetSelectedNodes(self) -> FakeCol:
-        return FakeCol(self._selected)
+    def GetSelectedNodes(self) -> FakeColLength:
+        return FakeColLength(self._selected)
 
 
 class FakeTextEdit:
@@ -380,6 +392,37 @@ def test_get_handler_por_tipo() -> None:
 def test_get_handler_desconhecido_retorna_generico() -> None:
     assert get_handler(FakeComponent(Type="GuiPicture")) is GENERIC_HANDLER
     assert get_handler_for_type("Inexistente") is GENERIC_HANDLER
+
+
+def test_get_handler_resolve_guishell_por_subtype() -> None:
+    # Controle reporta Type genérico "GuiShell" e o tipo real em SubType.
+    obj = FakeComponent(Type="GuiShell", SubType="GuiGridView")
+    assert isinstance(get_handler(obj), GuiGridViewHandler)
+
+
+def test_get_handler_resolve_subtype_sem_prefixo_gui() -> None:
+    # SAP real reporta SubType SEM o prefixo "Gui" (ex.: "Tree", "GridView").
+    assert isinstance(get_handler(FakeComponent(Type="GuiShell", SubType="Tree")), GuiTreeHandler)
+    assert isinstance(
+        get_handler(FakeComponent(Type="GuiShell", SubType="GridView")), GuiGridViewHandler
+    )
+
+
+@pytest.mark.parametrize(
+    ("sap_type", "subtype", "esperado"),
+    [
+        ("GuiShell", "Tree", "GuiTree"),
+        ("GuiShell", "GridView", "GuiGridView"),
+        ("GuiShell", "TextEdit", "GuiTextEdit"),
+        ("GuiShell", "Calendar", "GuiCalendar"),
+        ("GuiShell", "GuiGridView", "GuiGridView"),  # já é chave do registry
+        ("GuiShell", "Picture", "GuiPicture"),  # desconhecido: prefixa "Gui"
+        ("GuiShell", "", "GuiShell"),  # sem subtype: mantém
+        ("GuiTextField", "", "GuiTextField"),  # não-shell: inalterado
+    ],
+)
+def test_normalize_shell_type(sap_type: str, subtype: str, esperado: str) -> None:
+    assert normalize_shell_type(sap_type, subtype) == esperado
 
 
 def test_is_supported_shell() -> None:

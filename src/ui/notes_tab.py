@@ -69,7 +69,7 @@ class NotesTab(QWidget):
 
     def copy(self) -> None:
         if copy_text(self.text()):
-            self._ctx.statusMessage.emit("Notas copiadas para o clipboard.")
+            self._ctx.statusMessage.emit("Notas copiadas para a área de transferência.")
 
     def save(self) -> None:
         path, _ = QFileDialog.getSaveFileName(

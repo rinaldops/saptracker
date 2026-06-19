@@ -1,0 +1,877 @@
+
+SAP GUI Scripting Tool
+Documento de Especificação e Desenvolvimento
+Versão 1.0
+
+Ferramenta de Análise e Gravação para SAP GUI Scripting
+Superior ao Scripting Tracker de Stefan Schnell
+
+
+Sumário
+TOC \h \o "1-3" \t "Heading1,1,Heading2,2,Heading3,3"
+
+
+1. Visão Geral do Projeto
+1.1 Contexto e Motivação
+O SAP GUI Scripting é o mecanismo oficial da SAP para automação de interações com o SAP GUI for Windows. Por anos, a ferramenta de referência para desenvolvimento nessa área foi o Scripting Tracker, criada por Stefan Schnell e distribuída gratuitamente pela comunidade SAP. Em 2024, o autor descontinuou o projeto e encerrou o site de distribuição sem liberar o código-fonte.
+
+Esta especificação define o desenvolvimento de uma ferramenta substituta — denominada SAP GUI Scripting Tool — que não apenas replica as funcionalidades do Scripting Tracker, mas as supera em pontos críticos que o Tracker nunca resolveu: suporte a controles GuiShell/GuiTree, captura de diálogos Win32 nativos e geração de código em múltiplas linguagens de programação.
+
+1.2 Comparativo: Scripting Tracker vs. SAP GUI Scripting Tool
+
+Funcionalidade
+Scripting Tracker
+SAP GUI Scripting Tool
+Analyser — objetos SAP normais
+✅ Completo
+✅ Completo
+Analyser — controles GuiShell/GuiTree
+❌ Ausente
+✅ Handler especializado
+Recorder — eventos COM padrão
+✅ Completo
+✅ Completo
+Recorder — interações com GuiShell
+❌ Cego
+✅ Polling por snapshot
+Captura de diálogos Win32 nativos
+❌ Não captura
+✅ Thread win32gui
+Geração de código Python
+✅ Básico
+✅ Avançado + type hints
+Geração de código PowerShell
+✅ Sim
+✅ Sim
+Geração de código VBScript
+✅ Sim
+✅ Sim
+Geração de código AutoIt
+✅ Sim
+✅ Sim
+Geração de código Java
+✅ Sim
+✅ Sim
+Código híbrido SAP + Win32
+❌ Não
+✅ Intercalado automático
+Exportação da árvore de objetos
+✅ Sim
+✅ JSON + CSV + clipboard
+Highlight de objeto (moldura vermelha)
+✅ Sim
+✅ Sim
+Interface com abas
+✅ Sim
+✅ Redesenhada e ampliada
+Código aberto
+❌ Não
+✅ MIT License
+
+1.3 Objetivos
+Desenvolver uma ferramenta desktop Windows para suporte ao desenvolvimento de scripts SAP GUI Scripting.
+Superar as limitações arquiteturais do Scripting Tracker, especialmente em relação a controles GuiShell.
+Produzir código de automação limpo em múltiplas linguagens a partir de interações gravadas.
+Manter o projeto como software livre e bem documentado para continuidade pela comunidade.
+Entregar uma interface visual agradável, organizada por abas, intuitiva para desenvolvedores SAP.
+
+1.4 Escopo
+A ferramenta opera exclusivamente em ambientes Windows com SAP GUI for Windows instalado e Scripting habilitado no servidor e cliente. Não há suporte a SAP Web GUI, SAP Fiori ou plataformas não-Windows. O suporte a SAP GUI 64-bit (versão 8.00+) é obrigatório.
+
+2. Arquitetura da Solução
+2.1 Stack Tecnológica
+
+Camada
+Tecnologia
+Justificativa
+Linguagem principal
+Python 3.10+
+Ecossistema rico, bindings COM via pywin32, excelente suporte a GUI.
+Interface gráfica
+PyQt6
+Componentes avançados (QTreeWidget, QTabWidget, QScintilla), visual profissional.
+Editor de código
+QScintilla2
+Syntax highlight nativo para Python, VBScript, PowerShell, Java, AutoIt.
+COM / SAP Scripting
+pywin32 (win32com)
+Único binding confiável para o SAP GUI COM no Windows.
+Win32 nativo
+pywin32 (win32gui)
+Enumeração e monitoramento de janelas nativas do sistema.
+AutoItX
+pyautoit via COM
+Controle de diálogos Win32 e execução de scripts AutoIt.
+Empacotamento
+PyInstaller
+Gera executável standalone sem instalação do Python.
+Testes
+pytest + pytest-qt
+Testes unitários de lógica e integração de UI.
+Documentação
+Sphinx + autodoc
+Geração automática de docs a partir de docstrings.
+
+2.2 Estrutura de Diretórios do Projeto
+
+sap_scripting_tool/
+│
+├── src/
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── sap_connection.py      # Conexão COM com o SAP GUI
+│   │   ├── analyser.py            # Lógica do Analyser (percurso da árvore)
+│   │   ├── recorder.py            # Orquestrador do Recorder
+│   │   ├── recorder_com.py        # Captura via eventos COM (objetos normais)
+│   │   ├── recorder_polling.py    # Captura via snapshot/diff (GuiShell)
+│   │   ├── recorder_win32.py      # Captura de diálogos Win32 nativos
+│   │   └── shell_handlers/
+│   │       ├── __init__.py        # Registry de handlers + get_handler()
+│   │       ├── base.py            # Classe abstrata GuiShellHandler
+│   │       ├── grid_view.py       # Handler do GuiGridView
+│   │       ├── tree.py            # Handler do GuiTree
+│   │       ├── text_edit.py       # Handler do GuiTextEdit
+│   │       ├── calendar.py        # Handler do GuiCalendar
+│   │       ├── toolbar.py         # Handler do GuiToolbarControl
+│   │       └── generic.py         # Fallback para tipos sem handler dedicado
+│   │
+│   ├── codegen/
+│   │   ├── __init__.py
+│   │   ├── base.py                # Classe abstrata CodeGenerator
+│   │   ├── python_gen.py          # Gerador Python
+│   │   ├── vbscript_gen.py        # Gerador VBScript
+│   │   ├── powershell_gen.py      # Gerador PowerShell
+│   │   ├── autoit_gen.py          # Gerador AutoIt
+│   │   ├── java_gen.py            # Gerador Java (JShell)
+│   │   └── templates/             # Templates Jinja2 por linguagem
+│   │
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── main_window.py         # Janela principal + layout de abas
+│   │   ├── tab_analyser.py        # Aba Analyser
+│   │   ├── tab_recorder.py        # Aba Recorder + editor
+│   │   ├── tab_api_ref.py         # Aba de referência da API SAP
+│   │   ├── tab_notes.py           # Aba de notas textuais
+│   │   ├── widgets/
+│   │   │   ├── sap_tree_widget.py # Widget customizado da árvore SAP
+│   │   │   ├── shell_detail.py    # Painel de detalhes para GuiShell
+│   │   │   └── code_editor.py     # Editor com syntax highlight
+│   │   └── styles/                # QSS (stylesheets)
+│   │       └── main.qss
+│   │
+│   └── utils/
+│       ├── clipboard.py           # Utilitários de clipboard
+│       ├── export.py              # Exportação JSON/CSV
+│       └── logger.py              # Logging estruturado
+│
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── conftest.py
+│
+├── docs/
+│   ├── conf.py
+│   └── index.rst
+│
+├── scripts/
+│   └── build.py                   # Script de empacotamento PyInstaller
+│
+├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
+├── README.md
+└── LICENSE
+
+2.3 Diagrama de Camadas
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                         Interface (PyQt6)                            │
+│  ┌───────────┐  ┌───────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │ Analyser  │  │ Recorder  │  │  API Ref      │  │    Notes     │  │
+│  │    Tab    │  │    Tab    │  │    Tab        │  │     Tab      │  │
+│  └─────┬─────┘  └─────┬─────┘  └──────────────┘  └──────────────┘  │
+└────────┼──────────────┼───────────────────────────────────────────────┘
+         │              │
+┌────────▼──────────────▼───────────────────────────────────────────────┐
+│                           Camada Core                                 │
+│  ┌─────────────┐  ┌──────────────────────────────────────────────┐   │
+│  │  analyser   │  │              recorder                        │   │
+│  │  (árvore    │  │  ┌──────────────┐  ┌──────────┐  ┌────────┐ │   │
+│  │   SAP COM)  │  │  │ recorder_com │  │ polling  │  │ win32  │ │   │
+│  └──────┬──────┘  │  │ (eventos COM)│  │(snapshot)│  │(Win32) │ │   │
+│         │         │  └──────────────┘  └──────────┘  └────────┘ │   │
+│         │         └──────────────────────────────────────────────┘   │
+│         │                        │                                    │
+│  ┌──────▼────────────────────────▼───────────────────────────────┐   │
+│  │              shell_handlers (Registry + Handlers)             │   │
+│  │  GuiGridView │ GuiTree │ GuiTextEdit │ GuiCalendar │ Generic  │   │
+│  └──────────────────────────────┬────────────────────────────────┘   │
+└─────────────────────────────────┼─────────────────────────────────────┘
+                                  │
+┌─────────────────────────────────▼─────────────────────────────────────┐
+│                         Camada de Integração                          │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────────┐   │
+│  │  SAP GUI COM     │  │  win32gui (Win32) │  │  AutoItX (COM)    │   │
+│  │  (pywin32)       │  │  (diálogos nativos│  │  (execução scripts│   │
+│  │  GuiApplication  │  │   e janelas Win32)│  │   e Win32 avançado│   │
+│  └──────────────────┘  └──────────────────┘  └───────────────────┘   │
+└───────────────────────────────────────────────────────────────────────┘
+
+2.4 Módulo: shell_handlers
+Este módulo é o coração da superioridade da ferramenta em relação ao Scripting Tracker. Cada subclasse de GuiShell recebe um handler dedicado que implementa uma interface comum com três métodos obrigatórios:
+
+Método
+Assinatura
+Responsabilidade
+inspecionar()
+inspecionar(obj) -> dict
+Retorna estrutura com todo o conteúdo interno do controle para exibição no Analyser.
+tirar_snapshot()
+tirar_snapshot(obj) -> dict
+Captura o estado atual do controle para o sistema de diff do Recorder.
+gerar_codigo()
+gerar_codigo(id, antes, depois, lang) -> list[str]
+Compara dois snapshots e retorna as linhas de código correspondentes às mudanças.
+
+Os handlers implementados na versão inicial são:
+
+Handler
+Tipo SAP
+Capacidades de Introspecção
+GuiGridViewHandler
+GuiGridView
+Colunas, linhas, valores de célula, célula atual, linhas selecionadas, primeiro row visível.
+GuiTreeHandler
+GuiTree
+Chaves de nós, texto por chave, hierarquia de filhos, colunas (column tree), item text.
+GuiTextEditHandler
+GuiTextEdit
+Número de linhas, primeira linha visível, texto selecionado, linha atual.
+GuiCalendarHandler
+GuiCalendar
+Data de foco, intervalo de seleção, primeiro dia visível.
+GuiToolbarHandler
+GuiToolbarControl
+Botões disponíveis, tooltips, estado de habilitação.
+GuiShellGenerico
+Todos os demais
+Fallback: exibe ID, tipo e SubType. Sem introspecção de conteúdo.
+
+3. Planejamento de Desenvolvimento
+3.1 Fases e Entregáveis
+
+Fase
+Nome
+Entregáveis
+Duração Est.
+Prioridade
+0
+Fundação
+Estrutura do projeto, pyproject.toml, CI básico, README.
+1 semana
+Crítica
+1
+Conexão SAP
+sap_connection.py: conectar, listar sessões, detectar GUI ativo.
+1 semana
+Crítica
+2
+Analyser Base
+analyser.py + árvore de objetos normais + highlight (Visualize).
+2 semanas
+Crítica
+3
+Shell Handlers
+shell_handlers/ com GuiGridView, GuiTree, GuiTextEdit, GuiCalendar.
+3 semanas
+Crítica
+4
+Recorder COM
+recorder_com.py: eventos GuiSession.Change + buffer de ações.
+2 semanas
+Crítica
+5
+Recorder Polling
+recorder_polling.py: thread de snapshot/diff para GuiShell.
+2 semanas
+Crítica
+6
+Recorder Win32
+recorder_win32.py: thread win32gui + injeção de código AutoItX.
+2 semanas
+Alta
+7
+Geradores de Código
+codegen/ com Python, VBScript, PowerShell, AutoIt, Java.
+3 semanas
+Alta
+8
+Interface PyQt6
+Janela principal, 4 abas, QSS styling, QScintilla editor.
+3 semanas
+Alta
+9
+Exportação e Clipboard
+Export JSON/CSV, cópia de ID, cópia de código completo.
+1 semana
+Média
+10
+Testes e Documentação
+pytest + pytest-qt, Sphinx docs, docstrings completas.
+2 semanas
+Alta
+11
+Empacotamento
+PyInstaller: executável standalone 32-bit e 64-bit.
+1 semana
+Média
+
+3.2 Dependências Entre Fases
+
+Fase 0 (Fundação)
+  └── Fase 1 (Conexão SAP)
+        ├── Fase 2 (Analyser Base)
+        │     └── Fase 3 (Shell Handlers) ───────────────────────────────────┐
+        │                                                                     │
+        ├── Fase 4 (Recorder COM)                                            │
+        │     └── Fase 5 (Recorder Polling) ───── depende dos Shell Handlers ┤
+        │           └── Fase 6 (Recorder Win32)                              │
+        │                 └── Fase 7 (Geradores de Código)                   │
+        │                                                                     │
+        └── Fase 8 (Interface PyQt6) ◄─────────── depende de Fases 2, 3, 4, 5, 6, 7
+              └── Fase 9 (Exportação)
+              └── Fase 10 (Testes e Docs) ◄───── pode ser paralela às fases 4-7
+              └── Fase 11 (Empacotamento) ◄───── última fase
+
+3.3 Critérios de Aceite por Fase
+Fase 2 — Analyser Base
+Ao conectar ao SAP GUI ativo, a árvore de objetos é populada em menos de 3 segundos.
+Cada nó da árvore exibe: ID completo, tipo, texto e posição (top, left, width, height).
+Clicar com botão direito em qualquer nó aciona o Visualize (moldura vermelha) no SAP.
+Botão "Copiar ID" copia o ID completo para o clipboard.
+
+Fase 3 — Shell Handlers
+Ao encontrar um GuiGridView na árvore, o painel de detalhes exibe todas as colunas e os valores das células visíveis.
+Ao encontrar um GuiTree, o painel exibe a hierarquia completa de nós com chaves e textos.
+Ao encontrar um GuiTextEdit, o painel exibe o número de linhas e o conteúdo atual.
+Ao encontrar um GuiCalendar, o painel exibe a data de foco e o intervalo de seleção.
+
+Fase 5 — Recorder Polling
+Ao clicar em um nó do GuiTree durante a gravação, o código correspondente (SelectNode) é inserido no script.
+Ao selecionar células num GuiGridView, o código de SetCurrentCell/SelectedRows é gerado.
+A granularidade do polling é configurável (padrão: 200ms). Não deve consumir mais de 3% de CPU.
+
+Fase 6 — Recorder Win32
+Quando uma janela Win32 nativa aparece durante a gravação, um bloco de código AutoItX é inserido automaticamente no script com o título e a classe da janela detectada.
+Para diálogos de arquivo padrão (CLASS:#32770), o código gerado inclui o preenchimento do campo de nome de arquivo e o clique no botão de confirmação, com placeholders para os valores.
+
+4. Padrões de Código e Estrutura
+4.1 Configuração do Projeto (pyproject.toml)
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "sap-scripting-tool"
+version = "1.0.0"
+description = "SAP GUI Scripting Tool — Analyser, Recorder e Gerador de Código"
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.6",
+    "QScintilla>=2.14",
+    "pywin32>=306",
+    "pyautoit>=0.1.3",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-qt", "ruff", "mypy", "sphinx"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "UP", "ANN"]
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+
+4.2 Convenções de Código
+Nomenclatura
+Módulos e pacotes: snake_case (ex: shell_handlers, grid_view.py).
+Classes: PascalCase (ex: GuiGridViewHandler, SapConnection).
+Funções e métodos: snake_case (ex: inspecionar(), tirar_snapshot()).
+Constantes: UPPER_SNAKE_CASE (ex: POLLING_INTERVAL_MS, SAP_COM_ID).
+Variáveis privadas: prefixo underscore (ex: _session, _snapshot_anterior).
+
+Type Hints e Anotações
+Todo código deve usar type hints completos (Python 3.10+). Nenhuma função pública sem anotação de tipo é aceitável. O verificador mypy --strict deve passar sem erros.
+
+# ✅ CORRETO
+def inspecionar(self, obj: win32com.client.CDispatch) -> dict[str, Any]:
+    """Inspeciona o objeto GuiGridView e retorna seus dados internos."""
+    ...
+
+# ❌ INCORRETO — sem type hints
+def inspecionar(self, obj):
+    ...
+
+Docstrings
+Todas as classes, métodos públicos e funções devem ter docstrings no formato Google Style, compatível com Sphinx autodoc:
+
+class GuiGridViewHandler(GuiShellHandler):
+    """Handler especializado para controles GuiGridView (ALV Grid).
+
+    Implementa introspecção completa de colunas, linhas e células,
+    além de detecção de mudanças de estado para o Recorder.
+
+    Attributes:
+        _col_cache: Cache de nomes de colunas para evitar chamadas COM repetidas.
+    """
+
+    def inspecionar(self, obj: CDispatch) -> dict[str, Any]:
+        """Retorna estrutura com colunas e valores de todas as células visíveis.
+
+        Args:
+            obj: Objeto COM do GuiGridView obtido via session.FindById().
+
+        Returns:
+            Dicionário com chaves "tipo", "colunas", "linhas" e "total".
+
+        Raises:
+            COMError: Se o objeto SAP não estiver mais disponível.
+        """
+        ...
+
+4.3 Tratamento de Erros COM
+Toda chamada ao SAP GUI COM pode falhar se a sessão for fechada, a tela mudar ou o objeto não existir mais. O padrão obrigatório é:
+
+import pywintypes
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+def _chamar_com_seguro(func: Callable, *args, default=None) -> Any:
+    """Executa uma chamada COM com tratamento de erro padronizado.
+
+    Retorna default se a chamada falhar por qualquer razão COM.
+    Erros são logados em DEBUG para não poluir a interface.
+    """
+    try:
+        return func(*args)
+    except pywintypes.com_error as e:
+        logger.debug("Chamada COM falhou: %s | args: %s", e, args)
+        return default
+    except AttributeError as e:
+        logger.debug("Atributo COM indisponível: %s", e)
+        return default
+
+4.4 Threading — Regras Obrigatórias
+
+⚠️  Regra Crítica — Thread Safety com PyQt6 e COM
+Toda atualização de widget PyQt6 DEVE ocorrer na thread principal. Threads de background (polling, win32gui) NUNCA devem modificar widgets diretamente. Use sempre signals/slots para comunicação entre threads. Além disso, objetos COM do SAP GUI não são thread-safe: cada thread que usa COM deve chamar pythoncom.CoInitialize() no início e pythoncom.CoUninitialize() no final.
+
+# PADRÃO OBRIGATÓRIO para threads de background
+
+import pythoncom
+from PyQt6.QtCore import QThread, pyqtSignal
+
+class PollingWorker(QThread):
+    """Thread de polling para detecção de mudanças em GuiShell."""
+
+    mudanca_detectada = pyqtSignal(str, dict)  # (obj_id, codigo_gerado)
+
+    def run(self) -> None:
+        pythoncom.CoInitialize()  # OBRIGATÓRIO em threads COM
+        try:
+            self._loop_polling()
+        finally:
+            pythoncom.CoUninitialize()  # SEMPRE limpar
+
+    def _loop_polling(self) -> None:
+        while not self.isInterruptionRequested():
+            snap = self._tirar_snapshot()
+            mudancas = self._detectar_mudancas(snap)
+            if mudancas:
+                self.mudanca_detectada.emit(...)  # ← signal, não UI direta
+            self.msleep(POLLING_INTERVAL_MS)
+
+5. Sistema de Geração de Código
+5.1 Arquitetura do Codegen
+O sistema de geração de código é baseado em uma classe abstrata CodeGenerator com templates Jinja2 por linguagem. Essa separação garante que adicionar suporte a uma nova linguagem exija apenas a criação de um novo arquivo de generator e seus templates, sem modificar nenhum código existente.
+
+# src/codegen/base.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+@dataclass
+class Acao:
+    """Representa uma ação SAP capturada pelo Recorder."""
+    tipo: str          # "set_text", "press", "select_node", etc.
+    obj_id: str        # ID completo do objeto SAP
+    args: dict         # Argumentos específicos da ação
+    origem: str        # "com_event" | "polling" | "win32"
+
+class CodeGenerator(ABC):
+    """Interface base para todos os geradores de código."""
+
+    @abstractmethod
+    def gerar_cabecalho(self, info_sessao: dict) -> str:
+        """Gera o cabeçalho do script (imports, conexão SAP)."""
+        ...
+
+    @abstractmethod
+    def gerar_linha(self, acao: Acao) -> str:
+        """Converte uma Acao em uma linha de código."""
+        ...
+
+    @abstractmethod
+    def gerar_rodape(self) -> str:
+        """Gera o rodapé do script (fechamento de recursos)."""
+        ...
+
+    def gerar_script_completo(self, acoes: list[Acao], info: dict) -> str:
+        """Combina cabeçalho + linhas + rodapé em um script completo."""
+        partes = [self.gerar_cabecalho(info)]
+        partes += [self.gerar_linha(a) for a in acoes]
+        partes.append(self.gerar_rodape())
+        return "\n".join(partes)
+
+5.2 Linguagens Suportadas e Exemplos
+Para cada ação SAP, os geradores produzem código idiomático na linguagem alvo. O exemplo abaixo mostra a mesma ação "selecionar nó em GuiTree" nas cinco linguagens:
+
+Python
+# SAP GUI Scripting Tool — Gerado automaticamente
+import win32com.client
+
+sap_gui = win32com.client.GetObject("SAPGUI").GetScriptingEngine
+session = sap_gui.Children(0).Children(0)
+
+# Selecionar nó em GuiTree
+tree = session.FindById("wnd[0]/usr/cntlTREE1/shellcont/shell")
+tree.SelectNode("000042")
+
+VBScript
+' SAP GUI Scripting Tool — Gerado automaticamente
+If Not IsObject(application) Then
+    Set SapGuiAuto = GetObject("SAPGUI")
+    Set application = SapGuiAuto.GetScriptingEngine
+End If
+Set session = application.Children(0).Children(0)
+
+' Selecionar nó em GuiTree
+session.FindById("wnd[0]/usr/cntlTREE1/shellcont/shell").SelectNode "000042"
+
+PowerShell
+# SAP GUI Scripting Tool — Gerado automaticamente
+$SapGui    = [System.Runtime.InteropServices.Marshal]::GetActiveObject("SAPGUI")
+$App       = $SapGui.GetScriptingEngine()
+$Session   = $App.Children(0).Children(0)
+
+# Selecionar nó em GuiTree
+$Session.FindById("wnd[0]/usr/cntlTREE1/shellcont/shell").SelectNode("000042")
+
+AutoIt (com AutoItX para diálogos Win32 intercalados)
+; SAP GUI Scripting Tool — Gerado automaticamente
+#include <AutoItX3.au3>
+
+Local $oSAP     = ObjGet("SAPGUI")
+Local $oEngine  = $oSAP.GetScriptingEngine()
+Local $oSession = $oEngine.Children(0).Children(0)
+
+; Selecionar nó em GuiTree
+$oSession.FindById("wnd[0]/usr/cntlTREE1/shellcont/shell").SelectNode("000042")
+
+; --- Diálogo Win32 detectado automaticamente ---
+; Aguarda janela nativa (ex: Salvar Como)
+WinWaitActive("[CLASS:#32770]", "", 10)
+ControlSetText("[CLASS:#32770]", "", "Edit1", "C:elatoriosarquivo.pdf")
+ControlClick("[CLASS:#32770]", "", "Button1")
+
+6. Interface Visual
+6.1 Princípios de Design
+Clareza: cada aba tem um propósito único e bem definido. Sem mistura de funcionalidades.
+Consistência: paleta de cores, tipografia e espaçamentos uniformes em toda a aplicação.
+Contexto: o painel de detalhes sempre mostra informações relevantes ao item selecionado.
+Eficiência: as ações mais frequentes (copiar ID, atualizar árvore, iniciar/parar gravação) estão a um clique.
+Feedback visual: estados da ferramenta (conectado, gravando, parado) são sempre visíveis na status bar.
+
+6.2 Layout da Janela Principal
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  🔷 SAP GUI Scripting Tool                              [─] [□] [✕]         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  [⟳ Atualizar]  [Sessão: NSP/800 - USUARIO01 ▼]  [🔴 Gravar] [⬛ Parar]    │
+├───────────────────────────┬──────────────────────────────────────────────────┤
+│ [ Analyser ] [ Recorder ] │ [ API Reference ] [ Notas ]                      │
+├───────────────────────────┴──────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌─────────────────────────┐  ┌───────────────────────────────────────────┐ │
+│  │ 🗂 Árvore de Objetos    │  │ 📋 Detalhes do Objeto Selecionado         │ │
+│  │                         │  │                                           │ │
+│  │ ▼ wnd[0]                │  │  ID:      wnd[0]/usr/cntlGRID1/...       │ │
+│  │   ▼ usr                 │  │  Tipo:    GuiGridView                    │ │
+│  │     ▶ tbar[0]           │  │  Texto:   Resultado da Pesquisa          │ │
+│  │     ▼ cntlGRID1 🟦      │  │  Top:     50    Left: 0                  │ │
+│  │       ▼ [GuiGridView]   │  │  Width:   800   Height: 400              │ │
+│  │           Col: Material │  │                                           │ │
+│  │           Col: Qtd      │  │  ── Conteúdo Interno (GuiGridView) ────  │ │
+│  │           Linha 0: ...  │  │  Colunas: Material | Qtd | Valor         │ │
+│  │           Linha 1: ...  │  │  ┌──────────┬──────┬──────────┐          │ │
+│  │     ▶ tbar[1]           │  │  │ MAT001   │  10  │  500,00  │          │ │
+│  │                         │  │  │ MAT002   │   5  │  250,00  │          │ │
+│  │  [Copiar ID] [Highlight]│  │  └──────────┴──────┴──────────┘          │ │
+│  │  [Exportar JSON/CSV]    │  │  [Copiar Tabela]  [Exportar CSV]          │ │
+│  └─────────────────────────┘  └───────────────────────────────────────────┘ │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  ✅ Conectado  │  Sessão: ses[0]  │  Objetos: 47  │  Última atualização: 14:32│
+└──────────────────────────────────────────────────────────────────────────────┘
+
+6.3 Aba Recorder
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Linguagem: [Python ▼]   Sessão: [ses[0] ▼]   [▶ Executar] [💾 Salvar]     │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  1  │ # SAP GUI Scripting Tool — Python                                      │
+│  2  │ import win32com.client                                                 │
+│  3  │                                                                        │
+│  4  │ sap_gui = win32com.client.GetObject("SAPGUI").GetScriptingEngine       │
+│  5  │ session = sap_gui.Children(0).Children(0)                             │
+│  6  │                                                                        │
+│  7  │ # ── Ação gravada: 14:32:01 ── GuiGridView ──────────────────────     │
+│  8  │ grid = session.FindById("wnd[0]/usr/cntlGRID1/shellcont/shell")       │
+│  9  │ grid.SetCurrentCell(2, "Material")                                    │
+│ 10  │                                                                        │
+│ 11  │ # ── Ação gravada: 14:32:05 ── Diálogo Win32 detectado ──────────     │
+│ 12  │ import autoit                                                          │
+│ 13  │ autoit.win_wait_active("[CLASS:#32770]", timeout=10)                   │
+│ 14  │ autoit.control_set_text("[CLASS:#32770]", "Edit1", "arquivo.pdf")      │
+│ 15  │ autoit.control_click("[CLASS:#32770]", "Button1")                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  ✅ 15 linhas | 2 ações SAP | 1 ação Win32 | Última: 14:32:05               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+6.4 Paleta de Cores e Stylesheet (QSS)
+
+Elemento
+Cor (HEX)
+Uso
+Cor primária
+#1F3864
+Títulos, borda de janela, nós raiz da árvore.
+Cor de destaque
+#2E75B6
+Botões de ação, separadores de aba ativa, cabeçalhos de tabela.
+Cor de fundo clara
+#DEEAF1
+Fundo de campos de detalhe, caixas de código, linhas pares.
+Fundo neutro
+#F2F2F2
+Linhas ímpares de tabelas, painéis secundários.
+Gravando (ativo)
+#C00000
+Botão "Gravar" e indicador de status durante gravação.
+Sucesso/conectado
+#375623
+Indicador de status "Conectado".
+Aviso
+#7F6000
+Avisos no painel de status (sessão instável, COM lento).
+Texto principal
+#404040
+Corpo de texto, labels, conteúdo de células.
+Texto secundário
+#7F7F7F
+Hints, tipos de objeto, informações de posição.
+
+💡 Dica de implementação — QSS
+Centralize todas as regras de estilo em src/ui/styles/main.qss e carregue-o uma única vez na inicialização do QApplication. Evite aplicar estilos inline (setStyleSheet em widgets individuais) para facilitar futuras mudanças de tema. Defina variáveis de cor como constantes Python em src/ui/theme.py e use-as para gerar o QSS programaticamente.
+
+7. Estratégia de Documentação
+7.1 Níveis de Documentação
+
+Nível
+Artefato
+Conteúdo Esperado
+Código
+Docstrings (Google Style)
+Descrição, Args, Returns, Raises para toda função/classe pública.
+Módulo
+README por pacote
+Propósito do pacote, principais classes, exemplos de uso.
+API
+Sphinx autodoc HTML
+Documentação gerada automaticamente das docstrings.
+Usuário
+README.md raiz
+Instalação, primeiros passos, FAQ, capturas de tela.
+Arquitetura
+docs/architecture.md
+Decisões de design, diagrama de camadas, justificativas.
+Changelog
+CHANGELOG.md
+Histórico de versões seguindo o formato Keep a Changelog.
+
+7.2 Estrutura do README.md
+Badges: versão, licença, Python version, status de build (GitHub Actions).
+Descrição: o que é, o que faz de diferente do Scripting Tracker, screenshot da UI.
+Pré-requisitos: SAP GUI for Windows instalado, Scripting habilitado, Python 3.10+, AutoItX3.dll registrado.
+Instalação: pip install, ou download do executável standalone.
+Primeiros passos: como abrir o SAP, conectar a ferramenta, usar o Analyser e o Recorder.
+Suporte a GuiShell: seção dedicada explicando o que é possível inspecionar em cada tipo.
+Geração de código: tabela de linguagens suportadas com exemplos.
+Contribuição: como adicionar um novo handler GuiShell, como adicionar uma nova linguagem.
+Licença: MIT.
+
+7.3 Comentários no Código — Quando e Como
+
+📌 Princípio fundamental
+Comentários explicam o PORQUÊ, não o O QUÊ. O código bem escrito é autoexplicativo no "o quê". Use comentários para decisões não óbvias, limitações conhecidas da API SAP, workarounds e referências à documentação SAP.
+
+# ✅ BOM comentário — explica uma decisão não óbvia
+# A SAP não emite eventos COM para GuiShell (documentado em SAP Note 587202).
+# Por isso usamos polling em vez de event listeners para esses controles.
+self._polling_thread.start()
+
+# ✅ BOM comentário — documenta limitação da API
+# GetAllNodeKeys() retorna apenas os nós ATUALMENTE CARREGADOS no controle.
+# Nós não expandidos pelo usuário podem não aparecer aqui.
+chaves = tree_obj.GetAllNodeKeys()
+
+# ❌ MAU comentário — descreve o óbvio
+# Incrementa o contador
+contador += 1
+
+8. Estratégia de Testes
+8.1 Pirâmide de Testes
+
+Nível
+Volume
+Ferramentas
+O que testar
+Unitários
+~60% dos testes
+pytest
+Handlers, geradores de código, detecção de mudanças por snapshot.
+Integração
+~30% dos testes
+pytest + mocks COM
+Fluxo Recorder → CodeGen, exportação JSON/CSV, integração thread→signal.
+UI (E2E)
+~10% dos testes
+pytest-qt
+Carregamento de janela, interações de aba, copiar ID, abrir diálogos.
+
+8.2 Mocking do SAP GUI COM
+Testes de handlers e geradores não devem depender de um SAP GUI real. Use unittest.mock para simular objetos COM:
+
+# tests/unit/test_grid_view_handler.py
+from unittest.mock import MagicMock, patch
+from src.core.shell_handlers.grid_view import GuiGridViewHandler
+
+def _mock_grid(colunas: list[str], linhas: list[dict]) -> MagicMock:
+    """Cria um mock de GuiGridView com dados de teste."""
+    grid = MagicMock()
+    col_mock = MagicMock()
+    col_mock.Length = len(colunas)
+    col_mock.ElementAt.side_effect = lambda i: colunas[i]
+    grid.GetColumnNames.return_value = col_mock
+    grid.RowCount = len(linhas)
+    grid.GetCellValue.side_effect = lambda row, col: linhas[row].get(col, "")
+    grid.CurrentCellRow = 0
+    grid.CurrentCellColumn = colunas[0] if colunas else ""
+    grid.SelectedRows = ""
+    grid.FirstVisibleRow = 0
+    return grid
+
+def test_inspecionar_retorna_colunas_e_linhas():
+    handler = GuiGridViewHandler()
+    mock = _mock_grid(
+        colunas=["Material", "Qtd", "Valor"],
+        linhas=[{"Material": "MAT001", "Qtd": "10", "Valor": "500"}],
+    )
+    resultado = handler.inspecionar(mock)
+    assert resultado["colunas"] == ["Material", "Qtd", "Valor"]
+    assert resultado["linhas"][0]["Material"] == "MAT001"
+    assert resultado["total"] == 1
+
+9. Requisitos Não-Funcionais
+
+Categoria
+Requisito
+Critério de Aceite
+Desempenho
+Carregamento da árvore
+Popula toda a hierarquia de uma sessão SAP em menos de 3 segundos.
+Desempenho
+Polling de GuiShell
+Thread de polling consome no máximo 3% de CPU em estado idle.
+Desempenho
+Atualização do editor
+Inserção de nova linha de código no editor em menos de 50ms.
+Confiabilidade
+Tolerância a falhas COM
+Nenhuma exceção não tratada ao fechar uma janela SAP durante o uso da ferramenta.
+Confiabilidade
+Reconexão automática
+Ao detectar perda de conexão COM, tenta reconectar por 30 segundos antes de exibir erro.
+Usabilidade
+Atalhos de teclado
+F5 = Atualizar árvore; F9 = Iniciar gravação; Shift+F9 = Parar gravação; Ctrl+C = Copiar ID.
+Portabilidade
+Executável standalone
+Funciona sem instalação de Python, SAP GUI SDK ou qualquer runtime externo, exceto SAP GUI for Windows e AutoItX.
+Manutenibilidade
+Cobertura de testes
+Mínimo 80% de cobertura de linhas nos módulos core/ e codegen/.
+Licença
+Software livre
+Código publicado no GitHub com licença MIT. Toda dependência deve ter licença compatível.
+
+10. Guia de Contribuição
+10.1 Como Adicionar um Novo Handler GuiShell
+Para adicionar suporte a um novo tipo de GuiShell (ex: GuiOfficeIntegration), siga estes passos:
+
+Crie o arquivo src/core/shell_handlers/office_integration.py.
+Implemente a classe GuiOfficeIntegrationHandler herdando de GuiShellHandler.
+Implemente os três métodos obrigatórios: inspecionar(), tirar_snapshot() e gerar_codigo().
+Registre o handler em src/core/shell_handlers/__init__.py adicionando ao dicionário HANDLERS.
+Escreva testes unitários em tests/unit/test_office_integration_handler.py usando mocks COM.
+Atualize docs/shell_handlers.rst com a documentação do novo handler.
+Abra um Pull Request descrevendo quais propriedades/métodos do tipo SAP foram mapeados.
+
+10.2 Como Adicionar uma Nova Linguagem de Geração
+Crie src/codegen/nova_linguagem_gen.py herdando de CodeGenerator.
+Crie os templates Jinja2 em src/codegen/templates/nova_linguagem/.
+Registre a linguagem no dicionário GENERATORS em src/codegen/__init__.py.
+Adicione a linguagem ao ComboBox de seleção em src/ui/tab_recorder.py.
+Escreva testes para cada tipo de ação (set_text, press, select_node, etc.).
+
+10.3 Fluxo de Pull Request
+Todo PR deve ter: descrição do problema, solução adotada, testes adicionados.
+O CI (GitHub Actions) deve passar: ruff (lint), mypy (tipos), pytest (testes).
+Cobertura de testes não pode cair abaixo do piso atual.
+Toda nova funcionalidade deve ter docstrings e entrada no CHANGELOG.md.
+
+10.4 Limitações Conhecidas e Trabalho Futuro
+
+Limitação
+Impacto
+Caminho Sugerido
+GuiBarChart e GuiChart não têm introspecção de dados
+Médio
+Implementar captura via clipboard (Export to Excel) como workaround.
+GuiHTMLViewer: conteúdo HTML interno não acessível via COM
+Baixo
+Usar BrowserHandle para interagir via win32api se necessário.
+Nós GuiTree não carregados (lazy-load) não aparecem na inspeção
+Alto
+Implementar expansão automática progressiva com controle de profundidade.
+SAP GUI 32-bit e 64-bit requerem builds separados
+Médio
+Automatizar no CI com dois jobs PyInstaller (x86 e x64).
+Sem suporte a SAP Fiori / Web Dynpro
+N/A
+Fora do escopo. Considerar projeto separado com Playwright/Selenium.

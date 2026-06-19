@@ -54,6 +54,8 @@ class ConnectionTab(QWidget):
         """Conecta ao SAP e popula a lista de sessões."""
         self.lista.clear()
         try:
+            # Reconecta automaticamente se a referência COM tiver morrido.
+            self._ctx.connection.ensure_connected()
             self._sessions = self._ctx.connection.list_sessions_info()
         except SapConnectionError as e:
             self.status.setText(f"Erro de conexão: {e}")

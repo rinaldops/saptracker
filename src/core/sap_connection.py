@@ -15,6 +15,8 @@ A árvore de objetos do SAP GUI Scripting é:
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,6 +27,11 @@ logger = get_logger(__name__)
 
 #: ProgID/identificador do objeto SAP GUI registrado no Windows.
 SAP_GUI_OBJECT = "SAPGUI"
+
+#: Janela total (s) de tentativas de reconexão antes de desistir (NFR seção 9).
+RECONNECT_TIMEOUT_S = 30.0
+#: Intervalo (s) entre tentativas de reconexão.
+RECONNECT_INTERVAL_S = 1.0
 
 
 class SapConnectionError(RuntimeError):
@@ -139,6 +146,54 @@ class SapConnection:
     def _looks_like_application(obj: Any) -> bool:
         """Heurística: o objeto expõe ``Children`` como um GuiApplication."""
         return safe_get(obj, "Children") is not None
+
+    def ensure_connected(
+        self,
+        *,
+        timeout: float = RECONNECT_TIMEOUT_S,
+        interval: float = RECONNECT_INTERVAL_S,
+        _sleep: Callable[[float], None] = time.sleep,
+        _clock: Callable[[], float] = time.monotonic,
+    ) -> Any:
+        """Garante um ``GuiApplication`` válido, reconectando se necessário.
+
+        Se a conexão em cache já responde, retorna imediatamente. Caso contrário,
+        descarta a referência morta e tenta readquirir o engine repetidamente por
+        até ``timeout`` segundos, aguardando ``interval`` entre as tentativas.
+
+        Args:
+            timeout: Janela total de tentativas, em segundos.
+            interval: Pausa entre tentativas, em segundos.
+            _sleep: Função de espera (injetável em testes).
+            _clock: Relógio monotônico (injetável em testes).
+
+        Returns:
+            O ``GuiApplication`` reconectado.
+
+        Raises:
+            SapConnectionError: Se não reconectar dentro de ``timeout``.
+        """
+        if self.is_connected:
+            return self._application
+
+        # Referência possivelmente morta: limpa antes de tentar readquirir.
+        self._application = None
+        deadline = _clock() + timeout
+        while True:
+            app = self._acquire_application()
+            if app is not None:
+                self._application = app
+                logger.info("Reconectado ao SAP GUI Scripting Engine.")
+                return app
+            if _clock() >= deadline:
+                break
+            logger.debug("Reconexão falhou; nova tentativa em %.1fs.", interval)
+            _sleep(interval)
+
+        raise SapConnectionError(
+            f"Não foi possível reconectar ao SAP GUI após {timeout:.0f}s. "
+            "Verifique se o SAP GUI for Windows segue aberto com uma sessão logada."
+        )
 
     def disconnect(self) -> None:
         """Libera a referência ao ``GuiApplication`` (não fecha o SAP)."""

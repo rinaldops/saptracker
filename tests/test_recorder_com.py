@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from src.core.recorder_com import acao_from_component
+from typing import Any
+
+from src.core.recorder_com import ComRecorder, _SessionEventSink, acao_from_component
 from tests.conftest import FakeComponent
 
 
@@ -73,3 +75,42 @@ def test_timestamp_e_origem_propagados() -> None:
     acao = acao_from_component(comp, origem="com_event", timestamp="10:00:00")
     assert acao is not None
     assert acao.timestamp == "10:00:00"
+
+
+# --------------------------------------------------------------------------- #
+# _SessionEventSink — despacho de eventos COM
+# --------------------------------------------------------------------------- #
+def test_sink_change_emite_acao() -> None:
+    capturadas: list[Any] = []
+    sink = _SessionEventSink()
+    sink._sink = capturadas.append
+    comp = FakeComponent(Id="wnd[0]/usr/txt", Type="GuiTextField", Text="abc")
+    sink.Change(object(), comp)
+    sink.OnChange(object(), comp)  # variante de nome de evento
+    assert [a.tipo for a in capturadas] == ["set_text", "set_text"]
+
+
+def test_sink_sem_callback_e_noop() -> None:
+    sink = _SessionEventSink()  # _sink None por padrão
+    sink.Change(object(), FakeComponent(Id="x", Type="GuiButton"))  # não deve lançar
+
+
+def test_sink_ignora_componente_sem_acao() -> None:
+    capturadas: list[Any] = []
+    sink = _SessionEventSink()
+    sink._sink = capturadas.append
+    sink.Change(object(), FakeComponent(Id="x", Type="GuiShell"))  # shell → None
+    assert capturadas == []
+
+
+# --------------------------------------------------------------------------- #
+# ComRecorder — ciclo de vida (sem COM real)
+# --------------------------------------------------------------------------- #
+def test_comrecorder_degrada_sem_eventos_com() -> None:
+    # Uma sessão falsa não expõe typelib de eventos: WithEvents falha e o
+    # recorder fica inativo, sem lançar.
+    rec = ComRecorder(FakeComponent(Type="GuiSession"), sink=lambda _a: None)
+    rec.start()
+    assert rec.is_running is False
+    rec.stop()  # idempotente mesmo sem handler
+    assert rec.is_running is False

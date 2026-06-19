@@ -6,11 +6,13 @@ e o ``sleep`` são injetados para que a janela de 30s seja simulada sem esperas.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.sap_connection import SapConnection, SapConnectionError
+from src.core.sap_connection import SapConnection, SapConnectionError, SessionInfo
+from tests.conftest import FakeComponent, FakeInfo, FakeSession
 
 
 class _FakeClock:
@@ -68,3 +70,102 @@ def test_ensure_connected_desiste_apos_timeout() -> None:
             timeout=3, interval=1, _sleep=relogio.sleep, _clock=relogio
         )
     assert relogio.t >= 3  # esgotou a janela antes de desistir
+
+
+# --------------------------------------------------------------------------- #
+# Navegação (connect / iter_sessions / get_session / list_sessions_info)
+# --------------------------------------------------------------------------- #
+class _FakeColl:
+    """``GuiComponentCollection`` falsa."""
+
+    def __init__(self, items: list[Any]) -> None:
+        self._items = list(items)
+        self.Count = len(self._items)
+
+    def ElementAt(self, i: int) -> Any:
+        return self._items[i]
+
+
+def _app_com_sessoes(*sessoes: Any) -> Any:
+    conn = FakeComponent(Children=_FakeColl(list(sessoes)))
+    return FakeComponent(Children=_FakeColl([conn]))
+
+
+def _conectado(app: Any) -> SapConnection:
+    conn = SapConnection()
+    conn._application = app
+    return conn
+
+
+def test_is_connected_e_disconnect() -> None:
+    conn = SapConnection()
+    assert conn.is_connected is False  # sem application
+    conn._application = _app_com_sessoes(FakeSession())
+    assert conn.is_connected is True
+    conn.disconnect()
+    assert conn.is_connected is False
+
+
+def test_connect_levanta_quando_indisponivel() -> None:
+    conn = SapConnection()
+    conn._acquire_application = lambda: None  # type: ignore[assignment]
+    with pytest.raises(SapConnectionError, match="Scripting"):
+        conn.connect()
+
+
+def test_connect_usa_acquire_e_cacheia() -> None:
+    app = _app_com_sessoes(FakeSession())
+    conn = SapConnection()
+    conn._acquire_application = lambda: app  # type: ignore[assignment]
+    assert conn.connect() is app
+    assert conn.application is app  # já em cache, não readquire
+
+
+def test_iter_sessions_e_active_session() -> None:
+    s1, s2 = FakeSession(), FakeSession()
+    conn = _conectado(_app_com_sessoes(s1, s2))
+    assert conn.iter_sessions() == [s1, s2]
+    assert conn.active_session() is s1
+
+
+def test_active_session_none_quando_vazio() -> None:
+    conn = _conectado(_app_com_sessoes())
+    assert conn.active_session() is None
+
+
+def test_get_session_por_indices() -> None:
+    sess = FakeSession()
+    conn = _conectado(_app_com_sessoes(sess))
+    assert conn.get_session(0, 0) is sess
+
+
+def test_get_session_conexao_inexistente() -> None:
+    app = FakeComponent(Children=_FakeColl([None]))
+    conn = _conectado(app)
+    with pytest.raises(SapConnectionError, match="Conexão"):
+        conn.get_session(0, 0)
+
+
+def test_get_session_sessao_inexistente() -> None:
+    conn_obj = FakeComponent(Children=_FakeColl([None]))
+    app = FakeComponent(Children=_FakeColl([conn_obj]))
+    conn = _conectado(app)
+    with pytest.raises(SapConnectionError, match="Sessão"):
+        conn.get_session(0, 0)
+
+
+def test_list_sessions_info_extrai_metadados() -> None:
+    sess = FakeSession(FakeInfo(system="NSP", client="800", user="USER01", transaction="SE16"))
+    conn = _conectado(_app_com_sessoes(sess))
+    infos = conn.list_sessions_info()
+    assert len(infos) == 1
+    info = infos[0]
+    assert (info.system, info.client, info.user) == ("NSP", "800", "USER01")
+    assert info.connection_index == 0 and info.session_index == 0
+
+
+def test_session_info_label() -> None:
+    info = SessionInfo(0, 0, "NSP", "800", "USER01", "SE16", "Título")
+    assert info.label == "NSP/800 - USER01"
+    incompleto = SessionInfo(0, 0, "", "", "", "", "")
+    assert incompleto.label == "?/? - ?"

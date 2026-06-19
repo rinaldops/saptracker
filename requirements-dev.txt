@@ -5,3 +5,5 @@ pytest-cov
 ruff
 mypy
 pyinstaller>=6
+sphinx>=7
+myst-parser>=2

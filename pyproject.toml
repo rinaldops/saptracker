@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-qt>=4", "pytest-cov", "ruff", "mypy"]
+docs = ["sphinx>=7", "myst-parser>=2"]
 build = ["pyinstaller>=6"]
 
 [project.scripts]

@@ -66,11 +66,9 @@ class MainWindow(QMainWindow):
         Ctrl+C = copiar ID (apenas com foco no Analyser, para não atropelar a
         cópia padrão de texto nas demais abas).
         """
-        QShortcut(QKeySequence(Qt.Key.Key_F5), self, activated=self.refresh_tree)
-        QShortcut(QKeySequence(Qt.Key.Key_F9), self, activated=self.start_recording)
-        QShortcut(
-            QKeySequence("Shift+F9"), self, activated=self.stop_recording
-        )
+        QShortcut(QKeySequence(Qt.Key.Key_F5), self).activated.connect(self.refresh_tree)
+        QShortcut(QKeySequence(Qt.Key.Key_F9), self).activated.connect(self.start_recording)
+        QShortcut(QKeySequence("Shift+F9"), self).activated.connect(self.stop_recording)
         copy_id = QShortcut(QKeySequence.StandardKey.Copy, self.analyser_tab)
         copy_id.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         copy_id.activated.connect(self.analyser_tab.copy_selected_id)

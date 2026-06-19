@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QCursor
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QCursor, QMouseEvent, QShowEvent
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
@@ -36,6 +38,36 @@ _ID_ROLE = int(Qt.ItemDataRole.UserRole)
 _SEARCH_ROLE = _ID_ROLE + 1
 
 
+class ObjectTreeWidget(QTreeWidget):
+    """Árvore que expõe o pressionar/soltar do botão direito sobre um item."""
+
+    rightButtonPressed = pyqtSignal(object)
+    rightButtonReleased = pyqtSignal()
+
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802 - API Qt
+        if event is None:
+            super().mousePressEvent(event)
+            return
+        if event.button() == Qt.MouseButton.RightButton:
+            item = self.itemAt(event.position().toPoint())
+            if item is not None:
+                self.setCurrentItem(item)
+                self.rightButtonPressed.emit(item)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802 - API Qt
+        if event is None:
+            super().mouseReleaseEvent(event)
+            return
+        if event.button() == Qt.MouseButton.RightButton:
+            self.rightButtonReleased.emit()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
 class AnalyserTab(QWidget):
     """Percorre e inspeciona a árvore de objetos da sessão selecionada."""
 
@@ -50,6 +82,7 @@ class AnalyserTab(QWidget):
         self._search_matches: list[QTreeWidgetItem] = []
         self._search_idx: int = -1
         self._last_query: str = ""
+        self._column_widths_initialized = False
         self._build_ui()
         ctx.sessionChanged.connect(self._on_session_changed)
 
@@ -59,11 +92,6 @@ class AnalyserTab(QWidget):
         barra = QHBoxLayout()
         self.btn_analyse = QPushButton("Analisar sessão")
         self.btn_analyse.clicked.connect(self.analyse)
-        self.btn_highlight = QPushButton("Segure para destacar no SAP")
-        self.btn_highlight.pressed.connect(self.highlight_selected)
-        self.btn_highlight.released.connect(self.clear_highlight)
-        self.btn_clear_highlight = QPushButton("Limpar destaque")
-        self.btn_clear_highlight.clicked.connect(self.clear_highlight)
         self.btn_copy_id = QPushButton("Copiar ID")
         self.btn_copy_id.clicked.connect(self.copy_selected_id)
         self.btn_json = QPushButton("Exportar JSON")
@@ -72,8 +100,6 @@ class AnalyserTab(QWidget):
         self.btn_csv.clicked.connect(self.export_csv)
         for b in (
             self.btn_analyse,
-            self.btn_highlight,
-            self.btn_clear_highlight,
             self.btn_copy_id,
             self.btn_json,
             self.btn_csv,
@@ -110,9 +136,18 @@ class AnalyserTab(QWidget):
         layout.addLayout(busca)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.tree = QTreeWidget()
+        self.tree = ObjectTreeWidget()
         self.tree.setHeaderLabels(["Objeto", "Tipo"])
+        self.tree.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.tree.setAllColumnsShowFocus(True)
+        header = self.tree.header()
+        if header is not None:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         self.tree.itemSelectionChanged.connect(self._show_details)
+        self.tree.rightButtonPressed.connect(self._highlight_item)
+        self.tree.rightButtonReleased.connect(self.clear_highlight)
         splitter.addWidget(self.tree)
 
         self.details = QPlainTextEdit()
@@ -122,6 +157,24 @@ class AnalyserTab(QWidget):
         layout.addWidget(splitter, 1)
 
         self._update_enabled()
+
+    def showEvent(self, event: QShowEvent | None) -> None:  # noqa: N802 - API Qt
+        super().showEvent(event)
+        if not self._column_widths_initialized:
+            QTimer.singleShot(0, self._set_initial_column_widths)
+
+    def _set_initial_column_widths(self) -> None:
+        """Distribui inicialmente Objeto/Tipo em aproximadamente 2/3 e 1/3."""
+        viewport = self.tree.viewport()
+        if viewport is None:
+            return
+        available = viewport.width()
+        if available <= 0:
+            return
+        object_width = max(1, (available * 2) // 3)
+        self.tree.setColumnWidth(0, object_width)
+        self.tree.setColumnWidth(1, max(1, available - object_width))
+        self._column_widths_initialized = True
 
     # ------------------------------------------------------------------ #
     def _on_session_changed(self, session: Any) -> None:
@@ -139,8 +192,6 @@ class AnalyserTab(QWidget):
         self.btn_analyse.setEnabled(ok)
         tem_arvore = ok and self._root is not None
         for b in (
-            self.btn_highlight,
-            self.btn_clear_highlight,
             self.btn_copy_id,
             self.btn_json,
             self.btn_csv,
@@ -285,11 +336,11 @@ class AnalyserTab(QWidget):
     # ------------------------------------------------------------------ #
     # Destaque (highlight) — apenas um objeto ativo por vez
     # ------------------------------------------------------------------ #
-    def highlight_selected(self) -> None:
-        """Destaca o objeto selecionado enquanto o botão estiver pressionado."""
+    def _highlight_item(self, item: QTreeWidgetItem) -> None:
+        """Destaca no SAP o item pressionado com o botão direito."""
         if self._analyser is None:
             return
-        obj_id = self._selected_id()
+        obj_id = str(item.data(0, _ID_ROLE) or "")
         if not obj_id:
             return
         if self._highlighted_id:

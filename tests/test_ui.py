@@ -175,22 +175,39 @@ def _preparar_analyser_tab(janela, fake):  # type: ignore[no-untyped-def]
     return aba
 
 
-def test_highlight_e_removido_ao_soltar_botao(janela, qtbot) -> None:  # type: ignore[no-untyped-def]
+def test_highlight_e_removido_ao_soltar_botao_direito(janela, qtbot) -> None:  # type: ignore[no-untyped-def]
     fake = _FakeAnalyser(_arvore_exemplo())
     aba = _preparar_analyser_tab(janela, fake)
     raiz = aba.tree.topLevelItem(0)
+    item_a = raiz.child(0)
+    item_b = raiz.child(1)
+    aba.tree.expandAll()
+    aba.tree.doItemsLayout()
 
-    aba.tree.setCurrentItem(raiz.child(0))  # objeto "a"
-    qtbot.mousePress(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    posicao_a = aba.tree.visualItemRect(item_a).center()
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao_a)
+    assert aba.tree.currentItem() is item_a
     assert fake.highlights == [("a", True)]
-    qtbot.mouseRelease(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    qtbot.mouseRelease(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao_a)
     assert fake.highlights == [("a", True), ("a", False)]
 
-    aba.tree.setCurrentItem(raiz.child(1))  # objeto "b"
-    qtbot.mousePress(aba.btn_highlight, Qt.MouseButton.LeftButton)
-    qtbot.mouseRelease(aba.btn_highlight, Qt.MouseButton.LeftButton)
+    posicao_b = aba.tree.visualItemRect(item_b).center()
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao_b)
+    qtbot.mouseRelease(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao_b)
     assert fake.highlights[-1] == ("b", False)
     assert aba._highlighted_id == ""
+    assert not hasattr(aba, "btn_highlight")
+    assert not hasattr(aba, "btn_clear_highlight")
+
+
+def test_colunas_do_analisador_iniciam_em_dois_tercos(janela) -> None:  # type: ignore[no-untyped-def]
+    aba = janela.analyser_tab
+    aba.tree.resize(600, 400)
+    aba._column_widths_initialized = False
+    aba._set_initial_column_widths()
+    total = aba.tree.viewport().width()
+    assert abs((aba.tree.columnWidth(0) / total) - (2 / 3)) < 0.02
+    assert aba.tree.columnWidth(1) == total - aba.tree.columnWidth(0)
 
 
 def test_busca_cicla_pelos_resultados(janela) -> None:  # type: ignore[no-untyped-def]

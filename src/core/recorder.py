@@ -38,6 +38,14 @@ class ActionBuffer:
         """Acrescenta uma ação (chamado de múltiplas threads)."""
         with self._lock:
             self._acoes.append(acao)
+            total = len(self._acoes)
+        logger.debug(
+            "ActionBuffer.add [#%d]: [%s] %s  %s",
+            total,
+            acao.origem,
+            acao.tipo,
+            acao.obj_id or acao.args.get("title", str(acao.args)),
+        )
 
     def snapshot(self) -> list[Acao]:
         """Retorna uma cópia imutável da sequência atual de ações."""
@@ -84,7 +92,19 @@ class Recorder:
             if capture_polling
             else None
         )
-        self._win32 = Win32Recorder(self._buffer.add) if capture_win32 else None
+        # O Win32Recorder consulta o flag de modal do polling (thread COM
+        # confiável) para nunca capturar modais do próprio SAP GUI via AutoItX.
+        polling = self._polling
+        modal_predicate = (
+            (lambda: polling.modal_window_open) if polling is not None else None
+        )
+        self._win32 = (
+            Win32Recorder(
+                self._buffer.add, session=session, is_sap_modal_open=modal_predicate
+            )
+            if capture_win32
+            else None
+        )
 
     # ------------------------------------------------------------------ #
     # Ciclo de vida
@@ -98,9 +118,30 @@ class Recorder:
         if self._recording:
             return
         self._buffer.clear()
-        for motor in (self._com, self._polling, self._win32):
-            if motor is not None:
-                motor.start()
+        logger.info(
+            "Recorder.start: motores habilitados — COM=%s, Polling=%s, Win32=%s.",
+            self._com is not None,
+            self._polling is not None,
+            self._win32 is not None,
+        )
+        if self._com is not None:
+            self._com.start()
+        if self._polling is not None:
+            com_inativo = self._com is None or not self._com.is_running
+            # Campos normais E GuiShell só são gravados pelo polling quando o
+            # motor COM não está disponível — caso contrário o COM (CommandArray)
+            # já os captura de forma completa, e o polling apenas duplicaria.
+            self._polling.set_capture_fields(com_inativo)
+            self._polling.set_capture_shells(com_inativo)
+            self._polling.start()
+        if self._win32 is not None:
+            self._win32.start()
+        logger.info(
+            "Recorder.start: motores ativos — COM=%s, Polling=%s, Win32=%s.",
+            self._com.is_running if self._com else False,
+            self._polling.is_running if self._polling else False,
+            self._win32.is_running if self._win32 else False,
+        )
         self._recording = True
         logger.info("Gravação iniciada.")
 

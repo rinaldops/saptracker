@@ -96,8 +96,10 @@ class CodeGenerator(ABC):
 
     def gerar_script_completo(self, acoes: list[Acao], info: SessionInfoLite) -> str:
         """Combina cabeçalho + linhas + rodapé em um script completo."""
+        from src.codegen.instructions import dedupe_consecutive
+
         partes: list[str] = [self.gerar_cabecalho(info)]
-        for a in acoes:
+        for a in dedupe_consecutive(acoes):
             linha = self.gerar_linha(a)
             if linha:
                 partes.append(linha)

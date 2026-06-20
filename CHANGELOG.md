@@ -6,7 +6,42 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.1.0] - 2026-06-20
+
+### Adicionado
+- **Conexão direta via `ISapSessionEvents`.** O Recorder passou a se conectar
+  diretamente ao *connection point* `ISapSessionEvents` (com `Record = True`),
+  capturando as interações com objetos normais e GuiShell pelo `CommandArray`
+  oficial do SAP — a mesma base que o gravador nativo usa. O *polling* de
+  GuiShell e de campos vira *fallback*, ativado apenas quando o motor COM não
+  está disponível.
+
 ### Corrigido
+- **Texto digitado vinha truncado no 1º caractere.** O valor-string do
+  `CommandArray` (ex.: `"4900000618"`) era tratado como coleção COM e iterado
+  caractere a caractere, sobrando só `"4"`. `_as_sequence` agora trata escalares
+  (`str`/`bytes`/números/`bool`) como argumentos atômicos. O mesmo corrigiu
+  `method_call` com um único argumento string.
+- **Linhas duplicadas no script gerado.** O evento `Change` dispara duas vezes
+  para a mesma alteração (uma via `CommandArray`, outra via leitura do
+  componente). Nova passagem `dedupe_consecutive` colapsa ações adjacentes de
+  efeito idêntico, normalizando `property_set` × `set_text`/`set_combo_key`/
+  `set_checkbox`.
+- **Métodos sem argumento eram descartados** (ex.: `doubleClickCurrentCell` no
+  duplo-clique de célula de grid). A linha do `CommandArray` tem 2 elementos
+  `("M", "nome")`; `_command_lines` exigia `len >= 3` — passou a aceitar `>= 2`.
+- **Modais do próprio SAP GUI capturados via AutoItX.** Popups SAP (`wnd[1]`,
+  `wnd[2]` …) surgem como `#32770` nativos mas existem na árvore COM. O
+  Win32Recorder agora consulta um flag de modal mantido pelo *thread* de polling
+  e adia a decisão por um ciclo, ignorando modais SAP (capturados via COM) e
+  reservando o AutoItX a janelas do SO de fato externas ao SAP GUI.
+- **GuiShell duplicado entre polling e COM.** Com o motor COM ativo, o
+  *polling* de GuiShell é desligado: o `CommandArray` já grava essas interações
+  de forma completa, inclusive ações transitórias (`doubleClickCurrentCell`,
+  `pressButton`, `expandNode`) que o snapshot/diff não consegue observar.
+- **`caretPosition` poluía o script.** A propriedade só indica a posição do
+  cursor (sem efeito funcional) e passou a ser descartada na decodificação do
+  `CommandArray`.
 - **GuiGridView com colunas e linhas vazias.** A camada COM agora aceita
   coleções SAP baseadas em `Count`/`Length` e também `SAFEARRAY` convertidos
   pelo pywin32 em listas ou tuplas. Quando o SAP não expõe a coleção, a coluna

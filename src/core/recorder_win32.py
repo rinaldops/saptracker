@@ -13,11 +13,13 @@ A construção da ação (:func:`dialog_to_acao`) e a derivação de identificad
 
 from __future__ import annotations
 
+import re
 import threading
 from collections.abc import Callable
 from typing import Any
 
 from src.codegen.base import Acao
+from src.core.com_utils import com_len, safe_get
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,6 +31,19 @@ DIALOG_CLASS = "#32770"
 
 #: Intervalo padrão entre varreduras de janelas nativas (segundos).
 DEFAULT_SCAN_INTERVAL = 0.4
+
+#: Títulos de janelas Win32 que devem ser IGNORADOS pelo recorder.
+#: Diálogos de erro interno do SAP (sapfewdbg, crash handlers, Windows Script
+#: Host) não fazem parte do fluxo de trabalho do usuário e não devem ser
+#: reproduzidos em automação — capturá-los polui o script gerado.
+_IGNORED_TITLES: frozenset[str] = frozenset({
+    "Sapfewdbg: crash in saplogon.exe",
+    "Sapfewdbg Exception",
+    "Sapfewdbg",
+    "Windows Script Host",
+    "SAP GUI Scripting",
+    "SAPGUI",
+})
 
 
 def classnn_map(classes: list[str]) -> list[str]:
@@ -92,9 +107,12 @@ class Win32Recorder:
     Args:
         sink: Callback chamado com cada :class:`Acao` capturada.
         scan_interval: Segundos entre varreduras de janelas.
-        own_pid_only: Se ``True``, ignora diálogos de outros processos que não o
-            SAP (heurística desabilitada por padrão — capturamos todos os
-            ``#32770`` que surgirem durante a gravação).
+        session: Sessão COM ``GuiSession`` em gravação. Quando informada, o
+            recorder consulta a árvore SAP para **ignorar** janelas modais do
+            próprio SAP GUI (``wnd[1]``, ``wnd[2]`` …) — elas são capturadas via
+            COM como ``wnd[0]``. O AutoItX só deve atuar em janelas nativas do SO
+            que **não** pertencem ao SAP GUI. Se omitida, captura todo ``#32770``
+            (comportamento legado).
     """
 
     def __init__(
@@ -102,13 +120,25 @@ class Win32Recorder:
         sink: ActionSink,
         *,
         scan_interval: float = DEFAULT_SCAN_INTERVAL,
+        session: Any | None = None,
+        is_sap_modal_open: Callable[[], bool] | None = None,
     ) -> None:
         self._sink = sink
         self._scan_interval = scan_interval
+        self._session = session
+        #: Predicado externo (ex.: do PollingRecorder) que informa se há janela
+        #: modal SAP aberta. É a fonte preferida — vem de um thread COM confiável.
+        self._is_sap_modal_open = is_sap_modal_open
+        #: Sessão re-adquirida dentro da thread de scan (apartamento COM próprio).
+        self._thread_session: Any | None = None
+        self._conn_idx, self._sess_idx = self._extract_indices(session)
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         #: Handles de diálogos já capturados (para não emitir em duplicidade).
         self._seen: set[int] = set()
+        #: Diálogos vistos UMA vez, aguardando 1 ciclo antes da decisão — dá
+        #: tempo para a árvore COM refletir o ``wnd[N]`` de um modal SAP (corrida).
+        self._pending: set[int] = set()
 
     # ------------------------------------------------------------------ #
     @property
@@ -122,7 +152,19 @@ class Win32Recorder:
             logger.warning("Win32Recorder inativo: win32gui indisponível.")
             return
         self._stop.clear()
-        self._seen.clear()
+        # Pré-popula _seen com os diálogos JÁ visíveis antes de iniciar o scan,
+        # para que apenas diálogos que APARECEREM durante a gravação sejam capturados.
+        # Sem isso, "SAP Logon 800" (sempre aberto) é capturado como se fosse novo.
+        pre_existentes = self._enumerate_dialogs()
+        self._seen = set(pre_existentes)
+        self._pending = set()
+        if pre_existentes:
+            titulos = [self._title_safe(h) for h in pre_existentes]
+            logger.debug(
+                "Win32Recorder: %d diálogo(s) pré-existente(s) ignorados: %s",
+                len(pre_existentes),
+                titulos,
+            )
         self._thread = threading.Thread(target=self._run, name="Win32Recorder", daemon=True)
         self._thread.start()
         logger.info("Win32Recorder iniciado (intervalo=%.2fs).", self._scan_interval)
@@ -136,8 +178,17 @@ class Win32Recorder:
 
     # ------------------------------------------------------------------ #
     def _run(self) -> None:
-        while not self._stop.wait(self._scan_interval):
-            self.scan_once()
+        co_initialized = self._co_initialize()
+        try:
+            # Re-adquire a sessão neste apartamento COM (evita marshaling
+            # cross-STA com a thread Qt, que torna session.Children inacessível).
+            self._thread_session = self._acquire_thread_session() or self._session
+            while not self._stop.wait(self._scan_interval):
+                self.scan_once()
+        finally:
+            self._thread_session = None
+            if co_initialized:
+                self._co_uninitialize()
 
     def scan_once(self) -> list[Acao]:
         """Varre as janelas, captura diálogos novos e emite suas ações."""
@@ -147,15 +198,125 @@ class Win32Recorder:
         # Remove handles que sumiram (diálogo fechado) para permitir recaptura
         # caso o mesmo tipo de diálogo reabra com handle reciclado.
         self._seen &= atuais
+        self._pending &= atuais
         for hwnd in hwnds:
             if hwnd in self._seen:
                 continue
+            # Primeira aparição: adia a decisão por um ciclo. Isso evita a corrida
+            # em que o #32770 de um modal SAP é enumerado antes de a árvore COM
+            # registrar o wnd[N] — capturando-o erroneamente via AutoItX.
+            if hwnd not in self._pending:
+                self._pending.add(hwnd)
+                logger.debug(
+                    "Win32Recorder.scan_once: diálogo novo '%s' adiado 1 ciclo.",
+                    self._title_safe(hwnd),
+                )
+                continue
+            # Segunda aparição consecutiva: COM já estabilizou — decide agora.
+            self._pending.discard(hwnd)
             self._seen.add(hwnd)
+            # Verifica título antes de capturar (filtra diálogos SAP internos)
+            titulo = self._title_safe(hwnd)
+            if titulo in _IGNORED_TITLES or any(titulo.startswith(p) for p in ("Sapfewdbg",)):
+                logger.info(
+                    "Win32Recorder: diálogo '%s' IGNORADO (diálogo interno SAP/WScript).",
+                    titulo,
+                )
+                continue
+            # Janela modal do PRÓPRIO SAP GUI (wnd[1], wnd[2] …): aparece como
+            # #32770 nativo mas existe na árvore COM e é capturada via COM como
+            # wnd[0]. O AutoItX só deve atuar em janelas do SO fora do SAP GUI.
+            if self._sap_modal_open():
+                logger.info(
+                    "Win32Recorder: '%s' é janela modal do SAP (wnd[N]) — ignorada "
+                    "pelo AutoItX (capturada via COM).",
+                    titulo,
+                )
+                continue
             acao = self._capture(hwnd)
             if acao is not None:
+                logger.info(
+                    "Win32Recorder: diálogo '%s' capturado (%d controle(s)).",
+                    acao.args.get("title", "?"),
+                    len(acao.args.get("controls", [])),
+                )
                 detectadas.append(acao)
                 self._sink(acao)
         return detectadas
+
+    # ------------------------------------------------------------------ #
+    # Distinção SAP modal × diálogo do SO (via árvore COM)
+    # ------------------------------------------------------------------ #
+    def _sap_modal_open(self) -> bool:
+        """``True`` se a sessão SAP tem uma janela modal aberta (``wnd[1]`` …).
+
+        A sessão expõe as janelas em ``Children``: ``wnd[0]`` é a janela
+        principal; qualquer filho adicional é um ``GuiModalWindow`` (popup do
+        próprio SAP). Logo ``Children.Count > 1`` indica um modal SAP ativo, que
+        deve ser capturado via COM e **não** pelo AutoItX.
+
+        Prefere o predicado externo (``is_sap_modal_open``), atualizado por um
+        thread COM confiável (PollingRecorder). Sem ele, recorre à leitura COM
+        própria. Best-effort: sem sessão nem predicado, retorna ``False`` —
+        preservando o comportamento legado de capturar o ``#32770``.
+        """
+        if self._is_sap_modal_open is not None:
+            try:
+                return bool(self._is_sap_modal_open())
+            except Exception:  # noqa: BLE001 - predicado é best-effort
+                pass
+        session = self._thread_session
+        if session is None:
+            return False
+        try:
+            return com_len(safe_get(session, "Children")) > 1
+        except Exception:  # noqa: BLE001 - fronteira COM, best-effort
+            return False
+
+    def _acquire_thread_session(self) -> Any | None:
+        """Obtém a sessão no apartamento COM desta thread (via GetObject)."""
+        if self._session is None:
+            return None
+        try:
+            import win32com.client
+
+            sap = win32com.client.GetObject("SAPGUI")
+            engine = sap.GetScriptingEngine
+            return engine.Children(self._conn_idx).Children(self._sess_idx)
+        except Exception as e:  # noqa: BLE001 - best-effort
+            logger.debug("Win32Recorder: re-aquisição de sessão falhou — %s.", e)
+            return None
+
+    @staticmethod
+    def _extract_indices(session: Any | None) -> tuple[int, int]:
+        """Extrai ``con[N]`` e ``ses[N]`` do ID absoluto da sessão (default 0,0)."""
+        if session is None:
+            return (0, 0)
+        session_id = str(safe_get(session, "Id", "") or "")
+        parent_id = str(safe_get(safe_get(session, "Parent"), "Id", "") or "")
+        conn = re.search(r"con\[(\d+)]", session_id) or re.search(r"con\[(\d+)]", parent_id)
+        sess = re.search(r"ses\[(\d+)]", session_id)
+        return (int(conn.group(1)) if conn else 0, int(sess.group(1)) if sess else 0)
+
+    @staticmethod
+    def _co_initialize() -> bool:
+        try:
+            import pythoncom
+
+            pythoncom.CoInitialize()
+            return True
+        except Exception as e:  # noqa: BLE001 - ausente fora do Windows
+            logger.debug("Win32Recorder: CoInitialize indisponível — %s.", e)
+            return False
+
+    @staticmethod
+    def _co_uninitialize() -> None:
+        try:
+            import pythoncom
+
+            pythoncom.CoUninitialize()
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Win32Recorder: CoUninitialize falhou — %s.", e)
 
     # ------------------------------------------------------------------ #
     # Camada dependente de plataforma (isolada para testes)
@@ -168,6 +329,14 @@ class Win32Recorder:
             return True
         except Exception:  # noqa: BLE001
             return False
+
+    def _title_safe(self, hwnd: int) -> str:
+        """Retorna o título da janela sem propagar exceções."""
+        try:
+            import win32gui
+            return win32gui.GetWindowText(hwnd) or f"hwnd:{hwnd}"
+        except Exception:  # noqa: BLE001
+            return f"hwnd:{hwnd}"
 
     def _enumerate_dialogs(self) -> list[int]:
         """Retorna os handles de janelas visíveis de classe ``#32770``."""
@@ -203,6 +372,7 @@ class Win32Recorder:
 
         try:
             title = win32gui.GetWindowText(hwnd)
+            logger.debug("Win32Recorder._capture: hwnd=%d título='%s'", hwnd, title)
             child_classes: list[str] = []
             child_texts: list[str] = []
             child_hwnds: list[int] = []

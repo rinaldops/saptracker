@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Any
 
 from src.codegen import Acao
 from src.core.recorder import ActionBuffer, Recorder
@@ -118,3 +119,27 @@ def test_generate_code_usa_session_info_quando_omitido() -> None:
     vba = rec.generate_code("vba")
     assert "PRD" in vba and "SE16" in vba
     assert "Sub SAP_Macro()" in vba
+
+
+def test_start_desativa_polling_de_campos_quando_com_esta_ativo(monkeypatch: Any) -> None:
+    recorder = Recorder(
+        FakeSession(),
+        capture_com=True,
+        capture_polling=True,
+        capture_win32=False,
+    )
+    states: list[bool] = []
+    assert recorder._com is not None
+    assert recorder._polling is not None
+
+    def start_com() -> None:
+        recorder._com._active = True  # type: ignore[union-attr]
+
+    monkeypatch.setattr(recorder._com, "start", start_com)
+    monkeypatch.setattr(recorder._com, "stop", lambda: None)
+    monkeypatch.setattr(recorder._polling, "set_capture_fields", states.append)
+    monkeypatch.setattr(recorder._polling, "start", lambda: None)
+    monkeypatch.setattr(recorder._polling, "stop", lambda: None)
+    recorder.start()
+    recorder.stop()
+    assert states == [False]

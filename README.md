@@ -3,7 +3,7 @@
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-1.0.0-2E75B6)](CHANGELOG.md)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-375623)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-1F3864)](pyproject.toml)
-[![CI](https://github.com/example/sap-scripting-tool/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
+[![CI](https://github.com/rinaldops/saptracker/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 
 Ferramenta desktop para Windows de **análise e gravação de SAP GUI Scripting**,
 substituta de código aberto do descontinuado *Scripting Tracker* (Stefan Schnell,
@@ -19,14 +19,14 @@ resolve exatamente as lacunas que ele nunca cobriu:
 
 | Funcionalidade | Scripting Tracker | SAP GUI Scripting Tool |
 | --- | :---: | :---: |
-| Analyser de objetos SAP normais | ✅ | ✅ |
-| Analyser de controles `GuiShell`/`GuiTree` | ❌ | ✅ Handler especializado |
-| Recorder por eventos COM | ✅ | ✅ |
-| Recorder de interações com `GuiShell` | ❌ | ✅ Polling por *snapshot* |
+| Analisador de objetos SAP normais | ✅ | ✅ |
+| Analisador de controles `GuiShell`/`GuiTree` | ❌ | ✅ Handler especializado |
+| Gravador por eventos COM | ✅ | ✅ |
+| Gravador de interações com `GuiShell` | ❌ | ✅ Polling por *snapshot* |
 | Captura de diálogos Win32 nativos | ❌ | ✅ *Thread* `win32gui` + AutoItX |
 | Código híbrido SAP + Win32 | ❌ | ✅ Intercalado automaticamente |
 | Geração de código | Básica | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java |
-| Exportação da árvore | ✅ | ✅ JSON + CSV + clipboard |
+| Exportação da árvore | ✅ | ✅ JSON + CSV + área de transferência |
 | Código aberto | ❌ | ✅ Licença MIT |
 
 ## Pré-requisitos
@@ -46,8 +46,8 @@ resolve exatamente as lacunas que ele nunca cobriu:
 ### Opção A — A partir do código-fonte
 
 ```bash
-git clone https://github.com/example/sap-scripting-tool.git
-cd sap-scripting-tool
+git clone https://github.com/rinaldops/saptracker.git
+cd saptracker
 
 python -m venv .venv
 .venv\Scripts\activate
@@ -77,11 +77,17 @@ acompanha a do interpretador Python usado no build.
 
 1. **Abra o SAP GUI** e faça logon em uma sessão, com Scripting habilitado.
 2. **Inicie a ferramenta** (`sap-scripting-tool` ou o `.exe`).
-3. Na aba **Conexão**, conecte-se ao SAP GUI ativo e selecione a sessão.
-4. Na aba **Analyser**, clique em *Analisar* (ou pressione **F5**) para popular a
-   árvore de objetos. Selecione um nó para ver os detalhes; use **Destacar** para
-   desenhar a moldura vermelha no SAP e **Copiar ID** (**Ctrl+C**) para o clipboard.
-5. Na aba **Recorder**, escolha a **linguagem** (VBA vem primeiro), clique em
+3. Na aba **Conexão**, clique em **Conectar / Atualizar sessões**. A primeira
+   sessão é selecionada automaticamente e recebe o marcador **CONECTADO**;
+   clique em outra sessão para trocar a conexão usada pela aplicação.
+4. Na aba **Analisador**, clique em **Analisar sessão** (ou pressione **F5**).
+   A barra de progresso acompanha os objetos processados. Use a busca para
+   localizar por nome, texto, tipo ou ID e pressione **Próximo** para percorrer
+   os resultados, expandindo automaticamente a hierarquia. Pressione o botão
+   direito sobre uma linha para destacar o objeto no SAP; ao soltá-lo, a
+   moldura desaparece. **Copiar ID** ou **Ctrl+C** envia o ID para a área de
+   transferência.
+5. Na aba **Gravador**, escolha a **linguagem** (VBA vem primeiro), clique em
    **Gravar** (**F9**), interaja com o SAP e clique em **Parar** (**Shift+F9**).
 6. Clique em **Gerar código** — o script aparece na aba **Código**, pronto para
    **Copiar** ou **Salvar** com a extensão correta.
@@ -93,17 +99,17 @@ acompanha a do interpretador Python usado no build.
 | `F5` | Atualizar a árvore de objetos |
 | `F9` | Iniciar gravação |
 | `Shift+F9` | Parar gravação |
-| `Ctrl+C` | Copiar ID do objeto selecionado (aba Analyser) |
+| `Ctrl+C` | Copiar ID do objeto selecionado (aba Analisador) |
 
 ## Suporte a GuiShell
 
 O grande diferencial da ferramenta. Cada tipo de `GuiShell` tem um handler
 dedicado em [`src/core/shell_handlers/`](src/core/shell_handlers/) que faz a
-introspecção do conteúdo interno e detecta mudanças para o Recorder:
+introspecção do conteúdo interno e detecta mudanças para o Gravador:
 
 | Tipo SAP | O que é inspecionado |
 | --- | --- |
-| `GuiGridView` (ALV Grid) | Colunas, linhas, valores de célula, célula atual, linhas selecionadas, primeira linha visível |
+| `GuiGridView` (ALV Grid) | Colunas, linhas, valores de célula, célula atual, linhas selecionadas e primeira linha visível; aceita coleções COM e `SAFEARRAY` |
 | `GuiTree` | Chaves de nós, texto por chave, hierarquia de filhos, colunas e *item text* |
 | `GuiTextEdit` | Número de linhas, primeira linha visível, texto selecionado, conteúdo atual |
 | `GuiCalendar` | Data de foco, intervalo de seleção, primeiro e último dia visível |
@@ -115,7 +121,7 @@ controles são gravados por *polling* de *snapshots* em vez de *event listeners*
 
 ## Geração de código
 
-O Recorder converte as ações capturadas em scripts idiomáticos. Linguagens
+O Gravador converte as ações capturadas em scripts idiomáticos. Linguagens
 suportadas (na ordem de exibição da UI):
 
 | Linguagem | Identificador | Saída |
@@ -168,7 +174,7 @@ PRs são bem-vindos. O CI (GitHub Actions) precisa passar em `ruff` (lint),
 1. Crie `src/codegen/<linguagem>.py` herdando de `CodeGenerator`.
 2. Registre a classe na tupla `_GENERATORS` em
    [`src/codegen/__init__.py`](src/codegen/__init__.py) — ela passa a aparecer
-   automaticamente no ComboBox da aba Recorder.
+   automaticamente na lista da aba Gravador.
 3. Escreva testes cobrindo as ações principais (`set_text`, `press`,
    `select_node`, etc.).
 

@@ -203,6 +203,23 @@ def test_grid_colunas_via_fallback_getcolumnnames() -> None:
     assert GuiGridViewHandler()._column_names(grid) == ["A", "B"]
 
 
+def test_grid_colunas_via_safearray_python() -> None:
+    grid = FakeGrid(columns=["PSPID", "POST1"], rows=[{"PSPID": "P-1", "POST1": "Projeto"}])
+    grid.GetColumnOrder = lambda: ("PSPID", "POST1")  # type: ignore[method-assign]
+    resultado = GuiGridViewHandler().inspecionar(grid)
+    assert resultado["colunas"] == ["PSPID", "POST1"]
+    assert resultado["linhas"] == [{"PSPID": "P-1", "POST1": "Projeto"}]
+
+
+def test_grid_usa_coluna_atual_quando_colecoes_indisponiveis() -> None:
+    grid = FakeGrid(columns=["PSPID"], rows=[{"PSPID": "P-1"}], current=(-1, "PSPID"))
+    grid.GetColumnOrder = lambda: None  # type: ignore[method-assign]
+    grid.GetColumnNames = lambda: None  # type: ignore[method-assign]
+    resultado = GuiGridViewHandler().inspecionar(grid)
+    assert resultado["colunas"] == ["PSPID"]
+    assert resultado["linhas"] == [{"PSPID": "P-1"}]
+
+
 def test_grid_respeita_max_rows() -> None:
     grid = FakeGrid(columns=["A"], rows=[{"A": str(i)} for i in range(10)])
     handler = GuiGridViewHandler(max_rows=3)

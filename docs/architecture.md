@@ -8,8 +8,8 @@ especificação completa está em `doc/SAP_GUI_Scripting_Tool_Especificacao.docx
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Interface (PyQt6)                     │
-│   Conexão · Analyser · Recorder · Código ·              │
-│   API Reference · Notas                                  │
+│   Conexão · Analisador · Gravador · Código ·            │
+│   Referência da API · Notas                              │
 ├─────────────────────────────────────────────────────────┤
 │                         Core                             │
 │   analyser  ·  recorder (com / polling / win32)         │
@@ -46,6 +46,18 @@ Chamadas ao SAP GUI são encapsuladas em utilitários seguros
 (`src/core/com_utils.py`) que registram falhas em DEBUG e retornam um valor
 padrão. A conexão tenta **reconexão automática por 30 s**
 (`SapConnection.ensure_connected`) antes de exibir erro.
+
+As coleções retornadas pelo SAP não têm uma representação única no
+pywin32. Os helpers `com_len` e `com_item` aceitam `Count`, `Length`,
+`ElementAt`, `Item`, indexadores Python e `SAFEARRAY` convertidos em listas ou
+tuplas. Essa normalização é usada pelos handlers de `GuiGridView` e `GuiTree`.
+
+### Análise e destaque
+
+O `Analyser` faz uma contagem leve da hierarquia COM antes do percurso completo
+para alimentar a barra de progresso com objetos processados/total. O destaque
+usa `Visualize(True)` enquanto o botão direito permanece pressionado sobre uma
+linha da árvore e `Visualize(False)` quando o botão é solto.
 
 ### Codegen extensível
 

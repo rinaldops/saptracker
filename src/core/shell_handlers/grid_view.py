@@ -41,6 +41,10 @@ class GuiGridViewHandler(GuiShellHandler):
             name = com_item(col_names, i)
             if name is not None:
                 names.append(str(name))
+        if not names:
+            current_column = str(safe_get(obj, "CurrentCellColumn", "") or "")
+            if current_column:
+                names.append(current_column)
         return names
 
     def inspecionar(self, obj: Any) -> dict[str, Any]:

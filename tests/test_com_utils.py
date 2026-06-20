@@ -49,12 +49,14 @@ def test_com_len_conta_via_count_e_length() -> None:
     assert com_len(ColLength(["a", "b", "c"])) == 3
     assert com_len(None) == 0
     assert com_len(object()) == 0  # nenhum dos atributos
+    assert com_len(("A", "B")) == 2  # SAFEARRAY convertido pelo pywin32
 
 
 def test_com_item_via_elementat_e_item() -> None:
     assert com_item(ColCount(["x", "y"]), 1) == "y"
     assert com_item(ColLength(["x", "y"]), 0) == "x"
     assert com_item(ColItem(["p", "q"]), 1) == "q"  # fallback para Item
+    assert com_item(("A", "B"), 1) == "B"
 
 
 def test_com_item_default_quando_indisponivel() -> None:

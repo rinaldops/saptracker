@@ -7,6 +7,16 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Corrigido
+- **GuiGridView com colunas e linhas vazias.** A camada COM agora aceita
+  coleções SAP baseadas em `Count`/`Length` e também `SAFEARRAY` convertidos
+  pelo pywin32 em listas ou tuplas. Quando o SAP não expõe a coleção, a coluna
+  atual é usada como fallback para evitar linhas vazias (`{}`).
+- **Destaques acumulados no SAP GUI.** O destaque passou a acompanhar o botão
+  direito do mouse diretamente sobre a árvore: pressionar destaca o objeto e
+  soltar remove a moldura, sem botões intermediários ou resíduos visuais.
+- **Barra de análise sem progresso real.** O percurso da hierarquia agora
+  reporta objetos processados/total e mantém a interface responsiva durante a
+  atualização da barra.
 - **GuiShell não era reconhecido pelo SubType real do SAP.** Os controles
   reportam `Type == "GuiShell"` e o tipo em `SubType` **sem o prefixo `Gui`**
   (ex.: `"Tree"`, `"GridView"`) — a resolução só casava `"GuiTree"`, então caía
@@ -32,7 +42,15 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   painel de detalhes e no *polling* do Recorder.
 
 ### Adicionado
-- Abas **API Reference** (referência pesquisável da API SAP GUI Scripting) e
+- Busca incremental no **Analisador** por nome, texto, tipo ou ID, com navegação
+  cíclica e expansão automática da hierarquia até o resultado.
+- Sinalização explícita **CONECTADO** na sessão SAP usada pela aplicação, com
+  seleção automática da primeira sessão encontrada.
+- Seleção de linha mais visível na árvore e proporção inicial de 2/3 para
+  **Objeto** e 1/3 para **Tipo**.
+- Interface principal integralmente em português: **Analisador**, **Gravador** e
+  **Referência da API**, além de títulos e mensagens associados.
+- Abas **Referência da API** (referência pesquisável da API SAP GUI Scripting) e
   **Notas** (bloco de anotações com copiar/abrir/salvar) na janela principal.
 - Atalhos de teclado globais: `F5` (atualizar árvore), `F9` (gravar),
   `Shift+F9` (parar gravação) e `Ctrl+C` (copiar ID, no Analyser).

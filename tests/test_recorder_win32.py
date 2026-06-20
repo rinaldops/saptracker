@@ -6,6 +6,7 @@ import sys
 from typing import Any
 
 from src.core.recorder_win32 import Win32Recorder, classnn_map, dialog_to_acao
+from tests.conftest import FakeComponent
 
 
 def test_classnn_map_numera_por_classe() -> None:
@@ -37,11 +38,11 @@ def test_dialog_to_acao_estrutura() -> None:
 
 
 def test_scan_once_captura_uma_vez(monkeypatch: Any) -> None:
-    """Um diálogo novo é capturado uma vez; rescans não duplicam."""
+    """Um diálogo novo é adiado 1 ciclo, capturado uma vez; rescans não duplicam."""
     capturadas: list[Any] = []
     rec = Win32Recorder(sink=capturadas.append)
 
-    # Simula um diálogo de handle 42 presente em duas varreduras seguidas.
+    # Simula um diálogo de handle 42 presente em varreduras seguidas.
     monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [42])
     monkeypatch.setattr(
         rec,
@@ -49,10 +50,12 @@ def test_scan_once_captura_uma_vez(monkeypatch: Any) -> None:
         lambda hwnd: dialog_to_acao("Imprimir", [("Edit1", "1")], "Button1"),
     )
 
-    primeira = rec.scan_once()
-    segunda = rec.scan_once()
-    assert len(primeira) == 1
-    assert segunda == []  # já visto → não recaptura
+    primeira = rec.scan_once()   # adia (1ª aparição)
+    segunda = rec.scan_once()    # captura (2ª aparição)
+    terceira = rec.scan_once()   # já visto → não recaptura
+    assert primeira == []
+    assert len(segunda) == 1
+    assert terceira == []
     assert len(capturadas) == 1
     assert capturadas[0].args["title"] == "Imprimir"
 
@@ -65,12 +68,75 @@ def test_dialogo_fechado_e_reaberto_recaptura(monkeypatch: Any) -> None:
     )
 
     monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [7])
-    rec.scan_once()
+    rec.scan_once()  # adia
+    rec.scan_once()  # captura
     monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [])  # fechou
     rec.scan_once()
     monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [7])  # reabriu (handle reciclado)
-    rec.scan_once()
+    rec.scan_once()  # adia de novo
+    rec.scan_once()  # captura de novo
     assert len(capturadas) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Distinção SAP modal × diálogo do SO
+# --------------------------------------------------------------------------- #
+def _sessao_com_n_janelas(n: int) -> FakeComponent:
+    """Sessão falsa cujo ``Children`` tem ``n`` janelas (com_len lê ``Count``)."""
+    return FakeComponent(Id="/app/con[0]/ses[0]", Children=FakeComponent(Count=n))
+
+
+def test_scan_ignora_modal_do_proprio_sap(monkeypatch: Any) -> None:
+    """#32770 que é janela modal SAP (wnd[1]) não é capturado pelo AutoItX."""
+    capturadas: list[Any] = []
+    rec = Win32Recorder(sink=capturadas.append)
+    rec._thread_session = _sessao_com_n_janelas(2)  # wnd[0] + wnd[1] (modal SAP)
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [55])
+    monkeypatch.setattr(rec, "_title_safe", lambda h: "Informação")
+    monkeypatch.setattr(
+        rec, "_capture", lambda h: dialog_to_acao("Informação", [], "Button1")
+    )
+    assert rec.scan_once() == []  # adia
+    assert rec.scan_once() == []  # decide: modal SAP → ignora
+    assert capturadas == []
+
+
+def test_scan_usa_predicado_externo_de_modal(monkeypatch: Any) -> None:
+    """O predicado injetado (ex.: flag do polling) tem prioridade sobre o COM próprio."""
+    capturadas: list[Any] = []
+    modal = {"aberto": True}
+    rec = Win32Recorder(sink=capturadas.append, is_sap_modal_open=lambda: modal["aberto"])
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [55])
+    monkeypatch.setattr(rec, "_title_safe", lambda h: "Informação")
+    monkeypatch.setattr(rec, "_capture", lambda h: dialog_to_acao("Informação", [], "B1"))
+    rec.scan_once()  # adia
+    assert rec.scan_once() == []  # predicado True → ignora
+    assert capturadas == []
+
+
+def test_scan_captura_dialogo_do_so_sem_modal_sap(monkeypatch: Any) -> None:
+    """#32770 sem modal SAP correspondente (só wnd[0]) é um diálogo do SO real."""
+    capturadas: list[Any] = []
+    rec = Win32Recorder(sink=capturadas.append)
+    rec._thread_session = _sessao_com_n_janelas(1)  # apenas wnd[0]
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [55])
+    monkeypatch.setattr(rec, "_title_safe", lambda h: "Salvar como")
+    monkeypatch.setattr(
+        rec, "_capture", lambda h: dialog_to_acao("Salvar como", [], "Button1")
+    )
+    assert rec.scan_once() == []      # adia
+    assert len(rec.scan_once()) == 1  # decide: sem modal SAP → captura
+    assert capturadas[0].args["title"] == "Salvar como"
+
+
+def test_sap_modal_open_sem_sessao_e_false() -> None:
+    rec = Win32Recorder(sink=lambda _a: None)  # session=None → _thread_session None
+    assert rec._sap_modal_open() is False
+
+
+def test_extract_indices_da_sessao() -> None:
+    assert Win32Recorder._extract_indices(FakeComponent(Id="/app/con[2]/ses[3]")) == (2, 3)
+    assert Win32Recorder._extract_indices(None) == (0, 0)
 
 
 # --------------------------------------------------------------------------- #

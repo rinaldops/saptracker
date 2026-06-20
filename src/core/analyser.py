@@ -130,7 +130,7 @@ class Analyser:
             progress_callback(total, total)
         todos = root.flatten()
         shells = [n for n in todos if n.is_shell]
-        logger.info(
+        logger.debug(
             "Árvore construída: %d nós, %d shells (%d com handler dedicado).",
             len(todos), len(shells), sum(1 for n in shells if n.shell_supported),
         )

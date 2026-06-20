@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 import src.core.recorder_polling as rp
-from src.core.recorder_polling import PollingRecorder, collect_shells, diff_to_acoes
+from src.core.recorder_polling import (
+    PollingRecorder,
+    collect_shells,
+    diff_field,
+    diff_to_acoes,
+    snapshot_field,
+)
 from tests.conftest import FakeComponent
 
 
@@ -99,6 +105,37 @@ def test_poll_once_baseline_depois_mudanca(monkeypatch: Any) -> None:
     assert capturadas and capturadas[0].args == {"text": "v2"}
 
 
+def test_poll_once_nao_captura_shells_quando_desabilitado(monkeypatch: Any) -> None:
+    """Com COM ativo (capture_shells=False) o polling ignora GuiShell por completo."""
+    capturadas: list[Any] = []
+    handler = _FakeHandler({"tipo": "GuiTextEdit", "conteudo": "v1"})
+    chamadas: list[int] = []
+
+    def _fake_collect(_s: Any) -> list[Any]:
+        chamadas.append(1)
+        return [("ed", object())]
+
+    monkeypatch.setattr(rp, "collect_shells", _fake_collect)
+    monkeypatch.setattr(rp, "get_handler", lambda _o: handler)
+
+    rec = PollingRecorder(
+        session=object(), sink=capturadas.append,
+        capture_fields=False, capture_shells=False,
+    )
+    rec.poll_once(emit=False)
+    handler.snap = {"tipo": "GuiTextEdit", "conteudo": "v2"}  # mudaria, se observado
+    assert rec.poll_once(emit=True) == []
+    assert capturadas == []
+    assert chamadas == []  # collect_shells nunca chamado
+
+
+def test_set_capture_shells_alterna_flag() -> None:
+    rec = PollingRecorder(object(), lambda _a: None, capture_shells=False)
+    assert rec._capture_shells is False
+    rec.set_capture_shells(True)
+    assert rec._capture_shells is True
+
+
 def test_poll_once_sem_mudanca_nao_emite(monkeypatch: Any) -> None:
     capturadas: list[Any] = []
     handler = _FakeHandler({"tipo": "GuiTextEdit", "conteudo": "igual"})
@@ -140,6 +177,139 @@ def test_collect_shells_sessao_sem_shell() -> None:
 # --------------------------------------------------------------------------- #
 # PollingRecorder — ciclo de vida da thread
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# snapshot_field e diff_field — GuiTabStrip
+# --------------------------------------------------------------------------- #
+def test_snapshot_field_tabstrip() -> None:
+    tab = FakeComponent(Id="wnd[0]/usr/tabsTS/tabpABA1")
+    strip = FakeComponent(Type="GuiTabStrip", SelectedTab=tab)
+    snap = snapshot_field(strip, "GuiTabStrip")
+    assert snap == {"tipo": "GuiTabStrip", "selected_tab_id": "wnd[0]/usr/tabsTS/tabpABA1"}
+
+
+def test_snapshot_field_tabstrip_sem_tab() -> None:
+    strip = FakeComponent(Type="GuiTabStrip", SelectedTab=None)
+    snap = snapshot_field(strip, "GuiTabStrip")
+    assert snap["selected_tab_id"] == ""
+
+
+def test_diff_field_tabstrip_emite_select() -> None:
+    antes = {"tipo": "GuiTabStrip", "selected_tab_id": "wnd[0]/usr/tabsTS/tabpABA1"}
+    depois = {"tipo": "GuiTabStrip", "selected_tab_id": "wnd[0]/usr/tabsTS/tabpABA2"}
+    acoes = diff_field("wnd[0]/usr/tabsTS", "GuiTabStrip", antes, depois)
+    assert len(acoes) == 1
+    assert acoes[0].tipo == "select"
+    assert acoes[0].obj_id == "wnd[0]/usr/tabsTS/tabpABA2"
+    assert acoes[0].origem == "campo"
+
+
+def test_diff_field_tabstrip_mesma_aba_sem_acao() -> None:
+    snap = {"tipo": "GuiTabStrip", "selected_tab_id": "wnd[0]/usr/tabsTS/tabpABA1"}
+    assert diff_field("strip", "GuiTabStrip", snap, dict(snap)) == []
+
+
+def test_polling_pode_restringir_captura_a_shells() -> None:
+    recorder = rp.PollingRecorder(object(), lambda _action: None, capture_fields=False)
+    assert recorder._capture_fields is False
+    recorder.set_capture_fields(True)
+    assert recorder._capture_fields is True
+
+
+def test_diff_field_tabstrip_tab_vazio_sem_acao() -> None:
+    antes = {"tipo": "GuiTabStrip", "selected_tab_id": ""}
+    depois = {"tipo": "GuiTabStrip", "selected_tab_id": ""}
+    assert diff_field("strip", "GuiTabStrip", antes, depois) == []
+
+
+# --------------------------------------------------------------------------- #
+# collect_fields — filtro Changeable
+# --------------------------------------------------------------------------- #
+def test_collect_fields_pula_readonly(monkeypatch: Any) -> None:
+    """Campos com Changeable=False não devem entrar na lista."""
+    editavel = FakeComponent(
+        Id="wnd[0]/usr/fld1", Type="GuiTextField", Text="abc",
+        Changeable=True, ContainerType=False,
+    )
+    readonly = FakeComponent(
+        Id="wnd[0]/usr/fld2", Type="GuiTextField", Text="xyz",
+        Changeable=False, ContainerType=False,
+    )
+    from tests.conftest import FakeComponent as FC
+
+    class _Coll2:
+        Count = 2
+        def ElementAt(self, i: int):
+            return [editavel, readonly][i]
+
+    session = FC(Id="ses[0]", Type="GuiSession", Children=_Coll2())
+    pares = rp.collect_fields(session)
+    ids = [oid for oid, _, _ in pares]
+    assert "wnd[0]/usr/fld1" in ids
+    assert "wnd[0]/usr/fld2" not in ids
+
+
+def test_collect_fields_pula_guitab_inativo(monkeypatch: Any) -> None:
+    """GuiTab com Changeable=False (aba inativa) não deve ser traversado."""
+    campo_na_aba_inativa = FakeComponent(
+        Id="wnd[0]/usr/tabs/tabpINATIVA/ssubCONTENT/fld",
+        Type="GuiTextField", Text="hidden",
+        Changeable=True,
+    )
+
+    class _CollInner:
+        Count = 1
+        def ElementAt(self, i: int):
+            return campo_na_aba_inativa
+
+    aba_inativa = FakeComponent(
+        Id="wnd[0]/usr/tabs/tabpINATIVA",
+        Type="GuiTab",
+        Changeable=False,
+        Children=_CollInner(),
+    )
+
+    class _CollOuter:
+        Count = 1
+        def ElementAt(self, i: int):
+            return aba_inativa
+
+    session = FakeComponent(Id="ses[0]", Type="GuiSession", Children=_CollOuter())
+    pares = rp.collect_fields(session)
+    ids = [oid for oid, _, _ in pares]
+    assert campo_na_aba_inativa.Id not in ids, "campo de GuiTab inativo não deve ser coletado"
+
+
+def test_collect_fields_inclui_guitab_ativo(monkeypatch: Any) -> None:
+    """GuiTab com Changeable=True (aba ativa) DEVE ser traversado."""
+    campo_na_aba_ativa = FakeComponent(
+        Id="wnd[0]/usr/tabs/tabpATIVA/ssubCONTENT/fld",
+        Type="GuiTextField", Text="visible",
+        Changeable=True,
+    )
+
+    class _CollInner:
+        Count = 1
+        def ElementAt(self, i: int):
+            return campo_na_aba_ativa
+
+    aba_ativa = FakeComponent(
+        Id="wnd[0]/usr/tabs/tabpATIVA",
+        Type="GuiTab",
+        Changeable=True,
+        Children=_CollInner(),
+    )
+
+    class _CollOuter:
+        Count = 1
+        def ElementAt(self, i: int):
+            return aba_ativa
+
+    session = FakeComponent(Id="ses[0]", Type="GuiSession", Children=_CollOuter())
+    pares = rp.collect_fields(session)
+    ids = [oid for oid, _, _ in pares]
+    assert campo_na_aba_ativa.Id in ids, "campo de GuiTab ativo deve ser coletado"
+
+
 def test_start_stop_thread() -> None:
     rec = PollingRecorder(session=object(), sink=lambda _a: None, poll_interval=0.01)
     assert rec.is_running is False

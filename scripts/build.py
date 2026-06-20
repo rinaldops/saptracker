@@ -36,7 +36,7 @@ def clean() -> None:
     """Remove artefatos de builds anteriores (``build/`` e ``dist/``)."""
     for d in (BUILD_DIR, DIST_DIR):
         if d.exists():
-            shutil.rmtree(d)
+            shutil.rmtree(d, ignore_errors=True)
             print(f"Removido: {d}")
 
 
@@ -60,7 +60,6 @@ def build(*, clean_first: bool = True) -> int:
         "-m",
         "PyInstaller",
         "--noconfirm",
-        "--clean",
         str(SPEC_FILE),
     ]
     print(f"Empacotando ({current_arch()}): {' '.join(cmd)}")

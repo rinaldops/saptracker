@@ -22,17 +22,27 @@ especificação completa está em `doc/SAP_GUI_Scripting_Tool_Especificacao.docx
 
 ## Decisões de design
 
-### Polling para GuiShell
+### Motores de gravação (COM primário, polling como *fallback*)
 
-O SAP **não emite eventos COM** para controles `GuiShell`/`GuiGridView`
-(documentado na *SAP Note 587202*). Por isso o Recorder usa três motores
-independentes:
+O Recorder usa três motores independentes que empurram `Acao` para um buffer
+único e cronológico:
 
-- **`recorder_com`** — escuta `GuiSession.Change` para objetos normais.
-- **`recorder_polling`** — tira *snapshots* periódicos e calcula *diffs* dos
-  `GuiShell` (intervalo configurável; padrão 200 ms, alvo &lt; 3% de CPU).
-- **`recorder_win32`** — *thread* `win32gui` que detecta diálogos Win32 nativos
-  e injeta blocos AutoItX no script.
+- **`recorder_com`** — conecta-se diretamente ao *connection point*
+  `ISapSessionEvents` com `Record = True` e traduz o `CommandArray` oficial do
+  SAP (o mesmo do gravador nativo). Captura tanto objetos normais quanto as
+  interações com `GuiShell` — inclusive ações transitórias (`doubleClickCurrentCell`,
+  `pressButton`, `expandNode`) que o snapshot/diff **não** observa.
+- **`recorder_polling`** — *fallback* por *snapshots*/`diffs` (intervalo padrão
+  200 ms, alvo &lt; 3% de CPU). Quando o motor COM está ativo, a captura de
+  campos e de `GuiShell` é desligada (o `CommandArray` já as grava, e duplicaria);
+  o *thread* permanece vivo apenas para detectar troca de tela e manter o flag
+  de janela modal SAP. Historicamente o *polling* era a única via para
+  `GuiShell` (*SAP Note 587202* — sem eventos COM no modelo antigo).
+- **`recorder_win32`** — *thread* `win32gui` que detecta diálogos `#32770`
+  nativos e injeta blocos AutoItX. Para **não** capturar modais do próprio SAP
+  GUI (`wnd[1]`, `wnd[2]` …, que surgem como `#32770` mas existem na árvore COM),
+  consulta o flag de modal do *polling* e adia a decisão por um ciclo; o AutoItX
+  fica reservado a janelas do sistema operacional externas ao SAP GUI.
 
 ### Thread safety
 

@@ -186,3 +186,76 @@ def test_win32_python_pyautoit() -> None:
     script = get_generator("python").gerar_script_completo([WIN32_ACAO], INFO)
     assert "import autoit" in script
     assert "win_wait" in script
+
+
+# --------------------------------------------------------------------------- #
+# Dedup de ações redundantes adjacentes (artefato do duplo evento Change)
+# --------------------------------------------------------------------------- #
+def test_dedupe_colapsa_property_set_e_set_combo_key_equivalentes() -> None:
+    from src.codegen.instructions import dedupe_consecutive
+
+    oid = "wnd[0]/usr/cmbACTION"
+    acoes = [
+        Acao(tipo="set_combo_key", obj_id=oid, args={"key": "A08"}),  # fallback
+        # property_set vindo do CommandArray (mesmo efeito)
+        Acao(tipo="property_set", obj_id=oid, args={"property": "key", "value": "A08"}),
+    ]
+    out = dedupe_consecutive(acoes)
+    assert len(out) == 1
+    assert out[0].tipo == "set_combo_key"
+
+
+def test_dedupe_colapsa_text_e_checkbox_equivalentes() -> None:
+    from src.codegen.instructions import dedupe_consecutive
+
+    txt = "wnd[0]/usr/txtX"
+    chk = "wnd[0]/usr/chkY"
+    acoes = [
+        Acao(tipo="property_set", obj_id=txt, args={"property": "text", "value": "4900000618"}),
+        Acao(tipo="set_text", obj_id=txt, args={"text": "4900000618"}),
+        Acao(tipo="set_checkbox", obj_id=chk, args={"selected": True}),
+        Acao(tipo="property_set", obj_id=chk, args={"property": "selected", "value": True}),
+    ]
+    out = dedupe_consecutive(acoes)
+    assert [a.obj_id for a in out] == [txt, chk]
+
+
+def test_dedupe_preserva_valores_diferentes() -> None:
+    from src.codegen.instructions import dedupe_consecutive
+
+    oid = "wnd[0]/usr/txtX"
+    acoes = [
+        Acao(tipo="set_text", obj_id=oid, args={"text": "A"}),
+        Acao(tipo="set_text", obj_id=oid, args={"text": "AB"}),
+    ]
+    assert len(dedupe_consecutive(acoes)) == 2
+
+
+def test_dedupe_nao_colapsa_reedicao_separada_por_outra_acao() -> None:
+    from src.codegen.instructions import dedupe_consecutive
+
+    oid = "wnd[0]/usr/txtX"
+    acoes = [
+        Acao(tipo="set_text", obj_id=oid, args={"text": "X"}),
+        Acao(tipo="send_vkey", obj_id="wnd[0]", args={"vkey": 0}),
+        Acao(tipo="set_text", obj_id=oid, args={"text": "X"}),
+    ]
+    assert len(dedupe_consecutive(acoes)) == 3
+
+
+def test_dedupe_nao_colapsa_press_repetido() -> None:
+    from src.codegen.instructions import dedupe_consecutive
+
+    oid = "wnd[0]/tbar[0]/btn[0]"
+    acoes = [Acao(tipo="press", obj_id=oid), Acao(tipo="press", obj_id=oid)]
+    assert len(dedupe_consecutive(acoes)) == 2
+
+
+def test_script_completo_aplica_dedup_no_vba() -> None:
+    oid = "wnd[0]/usr/cmbACTION"
+    acoes = [
+        Acao(tipo="set_combo_key", obj_id=oid, args={"key": "A08"}),
+        Acao(tipo="property_set", obj_id=oid, args={"property": "key", "value": "A08"}),
+    ]
+    script = get_generator("vba").gerar_script_completo(acoes, INFO)
+    assert script.count('cmbACTION") = "A08"') + script.count('cmbACTION").Key = "A08"') == 1

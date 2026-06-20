@@ -25,7 +25,7 @@ resolve exatamente as lacunas que ele nunca cobriu:
 | Gravador de interações com `GuiShell` | ❌ | ✅ Polling por *snapshot* |
 | Captura de diálogos Win32 nativos | ❌ | ✅ *Thread* `win32gui` + AutoItX |
 | Código híbrido SAP + Win32 | ❌ | ✅ Intercalado automaticamente |
-| Geração de código | Básica | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java |
+| Geração de código | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java |
 | Exportação da árvore | ✅ | ✅ JSON + CSV + área de transferência |
 | Código aberto | ❌ | ✅ Licença MIT |
 

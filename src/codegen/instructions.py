@@ -112,6 +112,16 @@ def translate(acao: Acao) -> list[Instruction]:
         out.append(PropertySet(oid, "selectionInterval", str(a.get("value", ""))))
     elif tipo == "set_combo_key":
         out.append(PropertySet(oid, "Key", str(a.get("key", ""))))
+    elif tipo == "property_set":
+        out.append(PropertySet(oid, str(a.get("property", "")), a.get("value")))
+    elif tipo == "method_call":
+        out.append(
+            MethodCall(
+                oid,
+                str(a.get("method", "")),
+                list(a.get("args", [])),
+            )
+        )
     elif tipo == "maximize":
         out.append(MethodCall(oid, "Maximize"))
     elif tipo == "comment":
@@ -138,12 +148,60 @@ def translate(acao: Acao) -> list[Instruction]:
     return out
 
 
+def _effect_key(acao: Acao) -> tuple[str, str, str] | None:
+    """Chave normalizada do *efeito* de uma ação que atribui valor a um campo.
+
+    Unifica as variações que descrevem a MESMA alteração de estado, venham elas
+    do ``CommandArray`` (``property_set`` com o nome de propriedade que o SAP usa)
+    ou do fallback de leitura do componente (``set_text``/``set_combo_key``/
+    ``set_checkbox``). Retorna ``None`` para ações que **não** devem ser
+    deduplicadas (botões, navegação, métodos, células de grid etc.).
+    """
+    a = acao.args
+    if acao.tipo == "set_text":
+        return (acao.obj_id, "text", str(a.get("text", "")))
+    if acao.tipo == "set_combo_key":
+        return (acao.obj_id, "key", str(a.get("key", "")))
+    if acao.tipo == "set_checkbox":
+        return (acao.obj_id, "selected", str(bool(a.get("selected", False))))
+    if acao.tipo == "property_set":
+        return (acao.obj_id, str(a.get("property", "")).lower(), str(a.get("value", "")))
+    return None
+
+
+def dedupe_consecutive(acoes: list[Acao]) -> list[Acao]:
+    """Remove ações de atribuição redundantes e **adjacentes** com o mesmo efeito.
+
+    O evento ``ISapSessionEvents.Change`` pode disparar duas vezes para uma única
+    alteração do usuário (uma via ``CommandArray``, outra via leitura direta do
+    componente), gerando duas linhas equivalentes no script. Esta passagem mantém
+    apenas a primeira de um par adjacente idêntico em efeito.
+
+    Conservadora por construção: só compara ações *vizinhas* (qualquer outra ação
+    entre elas reinicia a cadeia) e só colapsa quando o valor é igual — reedições
+    legítimas e valores distintos são preservados.
+    """
+    out: list[Acao] = []
+    last_key: tuple[str, str, str] | None = None
+    for acao in acoes:
+        key = _effect_key(acao)
+        if key is not None and key == last_key:
+            continue
+        out.append(acao)
+        last_key = key
+    return out
+
+
 def _origem_label(acao: Acao) -> str:
     """Rótulo de comentário descrevendo origem/timestamp da ação."""
     ts = f"{acao.timestamp} " if acao.timestamp else ""
     origem = {
         "com_event": "evento COM",
         "polling": "GuiShell",
+        "campo": "Campo SAP",
+        "tab": "Seleção de aba",
+        "nav": "NAVEGAÇÃO — verifique se o trigger correto é Enter/F-key/botão",
+        "nav_trans": "Transação inferida — ajuste se o acesso foi por menu/F-key",
         "win32": "Diálogo Win32 detectado",
     }.get(acao.origem, acao.origem)
     return f"── Ação gravada: {ts}── {origem} ──"

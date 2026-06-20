@@ -92,15 +92,24 @@ class Recorder:
             if capture_polling
             else None
         )
-        # O Win32Recorder consulta o flag de modal do polling (thread COM
-        # confiável) para nunca capturar modais do próprio SAP GUI via AutoItX.
+        # O Win32Recorder consulta o polling (thread COM confiável) para nunca
+        # capturar janelas do próprio SAP GUI via AutoItX: por flag de modal e,
+        # principalmente, casando o título do #32770 com as janelas SAP atuais.
         polling = self._polling
         modal_predicate = (
             (lambda: polling.modal_window_open) if polling is not None else None
         )
+        sap_window_predicate = (
+            (lambda titulo: titulo.strip() in polling.sap_window_titles)
+            if polling is not None
+            else None
+        )
         self._win32 = (
             Win32Recorder(
-                self._buffer.add, session=session, is_sap_modal_open=modal_predicate
+                self._buffer.add,
+                session=session,
+                is_sap_modal_open=modal_predicate,
+                is_sap_window=sap_window_predicate,
             )
             if capture_win32
             else None

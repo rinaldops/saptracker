@@ -105,7 +105,16 @@ def acao_from_component(
     elif tipo_acao == "set_checkbox":
         args = {"selected": bool(safe_get(component, "Selected", False))}
 
-    acao = Acao(tipo=tipo_acao, obj_id=oid, args=args, origem=origem, timestamp=timestamp)
+    # Rótulo legível para comentários de contexto (aba/menu): o id do menu é
+    # opaco (`menu[3]`), então o texto visível é capturado aqui na gravação.
+    label = ""
+    if sap_type in ("GuiTab", "GuiMenu"):
+        label = str(safe_get(component, "Text", "") or "")
+
+    acao = Acao(
+        tipo=tipo_acao, obj_id=oid, args=args, origem=origem,
+        timestamp=timestamp, label=label,
+    )
     logger.debug(
         "acao_from_component: capturado [%s] %s em '%s'.", origem, tipo_acao, oid
     )

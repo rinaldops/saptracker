@@ -19,7 +19,7 @@ from collections.abc import Callable
 from typing import Any
 
 from src.codegen.base import Acao
-from src.core.com_utils import com_len, safe_get
+from src.core.com_utils import com_item, com_len, safe_get
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -122,6 +122,7 @@ class Win32Recorder:
         scan_interval: float = DEFAULT_SCAN_INTERVAL,
         session: Any | None = None,
         is_sap_modal_open: Callable[[], bool] | None = None,
+        is_sap_window: Callable[[str], bool] | None = None,
     ) -> None:
         self._sink = sink
         self._scan_interval = scan_interval
@@ -129,6 +130,10 @@ class Win32Recorder:
         #: Predicado externo (ex.: do PollingRecorder) que informa se há janela
         #: modal SAP aberta. É a fonte preferida — vem de um thread COM confiável.
         self._is_sap_modal_open = is_sap_modal_open
+        #: Predicado externo que informa se um TÍTULO pertence a uma janela SAP.
+        #: Mais confiável que a contagem de modais (cobre popups de sistema cujo
+        #: ``Children.Count`` não os conta, ex.: SAPMSSY0 "Exibir logs").
+        self._is_sap_window = is_sap_window
         #: Sessão re-adquirida dentro da thread de scan (apartamento COM próprio).
         self._thread_session: Any | None = None
         self._conn_idx, self._sess_idx = self._extract_indices(session)
@@ -223,13 +228,13 @@ class Win32Recorder:
                     titulo,
                 )
                 continue
-            # Janela modal do PRÓPRIO SAP GUI (wnd[1], wnd[2] …): aparece como
-            # #32770 nativo mas existe na árvore COM e é capturada via COM como
-            # wnd[0]. O AutoItX só deve atuar em janelas do SO fora do SAP GUI.
-            if self._sap_modal_open():
+            # Janela do PRÓPRIO SAP GUI (modal wnd[1+] ou popup de sistema):
+            # aparece como #32770 nativo mas é uma janela SAP, capturada via COM.
+            # O AutoItX só deve atuar em janelas do SO de fato externas ao SAP GUI.
+            if self._belongs_to_sap(titulo):
                 logger.info(
-                    "Win32Recorder: '%s' é janela modal do SAP (wnd[N]) — ignorada "
-                    "pelo AutoItX (capturada via COM).",
+                    "Win32Recorder: '%s' é janela do SAP GUI — ignorada pelo "
+                    "AutoItX (capturada via COM).",
                     titulo,
                 )
                 continue
@@ -247,6 +252,48 @@ class Win32Recorder:
     # ------------------------------------------------------------------ #
     # Distinção SAP modal × diálogo do SO (via árvore COM)
     # ------------------------------------------------------------------ #
+    def _belongs_to_sap(self, titulo: str) -> bool:
+        """``True`` se o ``#32770`` é, na verdade, uma janela do SAP GUI.
+
+        Combina sinais independentes (qualquer um positivo basta), do mais
+        confiável ao de reserva:
+
+        1. **Título ∈ janelas SAP** (predicado do polling) — casa o título do
+           diálogo com ``ActiveWindow``/filhas; cobre popups de sistema que a
+           contagem de filhos não vê.
+        2. **Flag de modal** (predicado do polling) — ``Children.Count > 1``.
+        3. **Leitura síncrona própria** — varre a sessão re-adquirida na própria
+           thread no instante da decisão (sem lag do polling).
+        """
+        if self._is_sap_window is not None:
+            try:
+                if self._is_sap_window(titulo):
+                    return True
+            except Exception:  # noqa: BLE001 - predicado é best-effort
+                pass
+        if self._sap_modal_open():
+            return True
+        return self._own_title_match(titulo)
+
+    def _own_title_match(self, titulo: str) -> bool:
+        """Casa ``titulo`` com ``ActiveWindow``/filhas da sessão re-adquirida."""
+        session = self._thread_session
+        alvo = titulo.strip()
+        if session is None or not alvo:
+            return False
+        try:
+            active_text = str(safe_get(safe_get(session, "ActiveWindow"), "Text", "") or "").strip()
+            if active_text == alvo:
+                return True
+            children = safe_get(session, "Children")
+            for i in range(com_len(children)):
+                janela = com_item(children, i)
+                if str(safe_get(janela, "Text", "") or "").strip() == alvo:
+                    return True
+        except Exception:  # noqa: BLE001 - fronteira COM, best-effort
+            return False
+        return False
+
     def _sap_modal_open(self) -> bool:
         """``True`` se a sessão SAP tem uma janela modal aberta (``wnd[1]`` …).
 

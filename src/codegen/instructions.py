@@ -9,6 +9,7 @@ mapeamento semântico de cada tipo de ação.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -68,6 +69,20 @@ class Win32Dialog:
 
 Instruction = MethodCall | PropertySet | Comment | Raw | Win32Dialog
 
+#: Prefixo absoluto da sessão (``/app/con[N]/ses[M]/``) removido dos IDs no
+#: código gerado — o gravador nativo do SAP GUI usa IDs relativos a ``wnd[N]``.
+_SESSION_PREFIX = re.compile(r"^/app/con\[\d+\]/ses\[\d+\]/")
+
+
+def relative_id(obj_id: str) -> str:
+    """Torna o ID relativo a ``wnd[N]`` removendo o prefixo da sessão.
+
+    ``/app/con[0]/ses[0]/wnd[0]/tbar[0]/okcd`` → ``wnd[0]/tbar[0]/okcd``. O
+    ``session.FindById`` aceita IDs relativos à sessão, então o script gerado fica
+    mais limpo. IDs já relativos ou sem o prefixo são devolvidos intactos.
+    """
+    return _SESSION_PREFIX.sub("", obj_id)
+
 
 def translate(acao: Acao) -> list[Instruction]:
     """Traduz uma :class:`Acao` semântica em instruções neutras de linguagem.
@@ -81,8 +96,12 @@ def translate(acao: Acao) -> list[Instruction]:
     Tipos desconhecidos viram um comentário de aviso para não perder o registro.
     """
     a = acao.args
-    oid = acao.obj_id
+    oid = relative_id(acao.obj_id)
     out: list[Instruction] = []
+
+    ctx = _context_comment(acao)
+    if ctx is not None:
+        out.append(ctx)
 
     if acao.timestamp or acao.origem != "com_event":
         out.append(Comment(_origem_label(acao)))
@@ -190,6 +209,75 @@ def dedupe_consecutive(acoes: list[Acao]) -> list[Acao]:
         out.append(acao)
         last_key = key
     return out
+
+
+#: Comandos do okcd que NÃO são transações (não geram comentário de navegação).
+_OKCD_NAO_TRANSACAO: frozenset[str] = frozenset({"END", "EX", "I", "BACK"})
+
+
+def _parse_transaction(okcd_text: str) -> str | None:
+    """Extrai o código da transação de um valor de okcd (``/nMIGO`` → ``MIGO``).
+
+    Retorna ``None`` para comandos que não abrem transação (``/n`` sozinho —
+    volta ao menu —, funções iniciadas por ``=``, ``/i`` para encerrar etc.).
+    """
+    t = okcd_text.strip()
+    if not t or t.startswith("="):
+        return None
+    if t.startswith("/"):
+        # Prefixos de navegação que abrem transação: /n, /o, /*.
+        m = re.match(r"^/[no*](.+)$", t)
+        if not m:
+            return None
+        code = m.group(1).strip()
+    else:
+        code = t
+    code = code.upper()
+    if not code or code in _OKCD_NAO_TRANSACAO:
+        return None
+    return code
+
+
+def _okcd_text(acao: Acao) -> str | None:
+    """Texto atribuído ao campo de comando (okcd), via ``set_text`` ou ``property_set``."""
+    if not acao.obj_id.endswith("/okcd"):
+        return None
+    if acao.tipo == "set_text":
+        return str(acao.args.get("text", ""))
+    if acao.tipo == "property_set" and str(acao.args.get("property", "")).lower() == "text":
+        return str(acao.args.get("value", ""))
+    return None
+
+
+def _is_select(acao: Acao) -> bool:
+    """``True`` se a ação seleciona um objeto (aba, menu, rádio)."""
+    if acao.tipo == "select":
+        return True
+    return acao.tipo == "method_call" and str(acao.args.get("method", "")).lower() == "select"
+
+
+def _context_comment(acao: Acao) -> Comment | None:
+    """Comentário de contexto para ajudar a localizar-se no script gerado.
+
+    Cobre três mudanças de contexto: entrar numa transação (okcd), trocar de aba
+    (``tabp…``) e selecionar item de menu (``…/mbar/…``). Retorna ``None`` quando
+    a ação não representa uma dessas transições.
+    """
+    okcd = _okcd_text(acao)
+    if okcd is not None:
+        code = _parse_transaction(okcd)
+        return Comment(f"NAVEGANDO para a transação: {code}") if code else None
+
+    if _is_select(acao):
+        oid = acao.obj_id
+        leaf = oid.rsplit("/", 1)[-1]
+        if leaf.startswith("tabp"):
+            nome = acao.label or leaf[len("tabp"):]
+            return Comment(f"SELEÇÃO de aba: {nome}")
+        if "/mbar/" in oid or leaf.startswith("menu["):
+            nome = acao.label or leaf
+            return Comment(f"SELEÇÃO de item de Menu: {nome}")
+    return None
 
 
 def _origem_label(acao: Acao) -> str:

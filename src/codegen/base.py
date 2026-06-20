@@ -27,6 +27,9 @@ class Acao:
         args: Argumentos específicos da ação (ex: ``{"text": "ME23N"}``).
         origem: ``"com_event"`` | ``"polling"`` | ``"win32"``.
         timestamp: Marca de tempo legível (``HH:MM:SS``) opcional.
+        label: Rótulo legível do objeto (ex.: texto da aba/menu), capturado na
+            gravação para enriquecer comentários de contexto no código gerado.
+            Não afeta a renderização da ação em si.
     """
 
     tipo: str
@@ -34,6 +37,7 @@ class Acao:
     args: dict[str, Any] = field(default_factory=dict)
     origem: str = "com_event"
     timestamp: str = ""
+    label: str = ""
 
 
 @dataclass

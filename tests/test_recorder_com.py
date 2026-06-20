@@ -66,6 +66,21 @@ def test_radio_vira_select() -> None:
     assert acao is not None and acao.tipo == "select"
 
 
+def test_aba_e_menu_capturam_label_para_comentario() -> None:
+    """Aba e menu guardam o texto visível em ``label`` (para comentário de contexto)."""
+    aba = acao_from_component(
+        FakeComponent(Id="wnd[0]/usr/tabsTS/tabpQTD", Type="GuiTab", Text="Quantidades")
+    )
+    assert aba is not None and aba.label == "Quantidades"
+    menu = acao_from_component(
+        FakeComponent(Id="wnd[0]/mbar/menu[1]/menu[0]", Type="GuiMenu", Text="Criar")
+    )
+    assert menu is not None and menu.label == "Criar"
+    # Tipos sem rótulo de contexto não preenchem label.
+    botao = acao_from_component(FakeComponent(Id="wnd[0]/tbar[0]/btn[0]", Type="GuiButton"))
+    assert botao is not None and botao.label == ""
+
+
 def test_guishell_nao_e_capturado_por_com() -> None:
     """GuiShell é responsabilidade do motor de polling, não dos eventos COM."""
     comp = FakeComponent(Id="wnd[0]/usr/cntlGRID/shell", Type="GuiShell")

@@ -129,6 +129,40 @@ def test_scan_captura_dialogo_do_so_sem_modal_sap(monkeypatch: Any) -> None:
     assert capturadas[0].args["title"] == "Salvar como"
 
 
+def test_popup_de_sistema_detectado_por_titulo_mesmo_sem_modal(monkeypatch: Any) -> None:
+    """Popup SAPMSSY0 ('Exibir logs'): Children.Count=1, mas título bate no ActiveWindow."""
+    capturadas: list[Any] = []
+    rec = Win32Recorder(sink=capturadas.append)
+    # Sessão com ActiveWindow titulado mas SEM modal contado (Children.Count=1).
+    rec._thread_session = FakeComponent(
+        Id="/app/con[0]/ses[0]",
+        ActiveWindow=FakeComponent(Text="Exibir logs"),
+        Children=FakeComponent(Count=1),
+    )
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [99])
+    monkeypatch.setattr(rec, "_title_safe", lambda h: "Exibir logs")
+    monkeypatch.setattr(rec, "_capture", lambda h: dialog_to_acao("Exibir logs", [], "B1"))
+    rec.scan_once()  # adia
+    assert rec.scan_once() == []  # decide: título bate janela SAP → ignora
+    assert capturadas == []
+
+
+def test_belongs_to_sap_usa_predicado_de_titulo() -> None:
+    rec = Win32Recorder(sink=lambda _a: None, is_sap_window=lambda t: t == "Exibir logs")
+    assert rec._belongs_to_sap("Exibir logs") is True
+    assert rec._belongs_to_sap("Salvar como") is False
+
+
+def test_own_title_match_varre_active_e_filhas() -> None:
+    rec = Win32Recorder(sink=lambda _a: None)
+    rec._thread_session = FakeComponent(
+        ActiveWindow=FakeComponent(Text="Tela principal"),
+        Children=[FakeComponent(Text="Tela principal"), FakeComponent(Text="Restringir valores")],
+    )
+    assert rec._own_title_match("Restringir valores") is True
+    assert rec._own_title_match("Inexistente") is False
+
+
 def test_sap_modal_open_sem_sessao_e_false() -> None:
     rec = Win32Recorder(sink=lambda _a: None)  # session=None → _thread_session None
     assert rec._sap_modal_open() is False

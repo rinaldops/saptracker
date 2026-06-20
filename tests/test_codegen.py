@@ -259,3 +259,82 @@ def test_script_completo_aplica_dedup_no_vba() -> None:
     ]
     script = get_generator("vba").gerar_script_completo(acoes, INFO)
     assert script.count('cmbACTION") = "A08"') + script.count('cmbACTION").Key = "A08"') == 1
+
+
+# --------------------------------------------------------------------------- #
+# Comentários de contexto (navegação de transação, aba, menu)
+# --------------------------------------------------------------------------- #
+def test_comentario_navegacao_transacao_via_property_set() -> None:
+    from src.codegen.instructions import _context_comment
+
+    acao = Acao(tipo="property_set", obj_id="wnd[0]/tbar[0]/okcd",
+                args={"property": "text", "value": "/nMIGO"})
+    c = _context_comment(acao)
+    assert c is not None and c.text == "NAVEGANDO para a transação: MIGO"
+
+
+def test_comentario_navegacao_transacao_via_set_text_e_bare() -> None:
+    from src.codegen.instructions import _context_comment, _parse_transaction
+
+    acao = Acao(tipo="set_text", obj_id="wnd[0]/tbar[0]/okcd", args={"text": "cn43n"})
+    c = _context_comment(acao)
+    assert c is not None and c.text == "NAVEGANDO para a transação: CN43N"
+    assert _parse_transaction("/oVA01") == "VA01"
+    assert _parse_transaction("/n") is None       # volta ao menu → sem comentário
+    assert _parse_transaction("=POST") is None     # função, não transação
+    assert _parse_transaction("/nend") is None     # comando de sistema
+
+
+def test_comentario_selecao_aba_usa_label_ou_id() -> None:
+    from src.codegen.instructions import _context_comment
+
+    com_label = Acao(tipo="select", obj_id="wnd[0]/usr/tabsTS/tabpQTD", label="Quantidades")
+    assert _context_comment(com_label).text == "SELEÇÃO de aba: Quantidades"  # type: ignore[union-attr]
+    sem_label = Acao(tipo="select", obj_id="wnd[0]/usr/tabsTS/tabpOK_GOITEM_QTD")
+    assert _context_comment(sem_label).text == "SELEÇÃO de aba: OK_GOITEM_QTD"  # type: ignore[union-attr]
+
+
+def test_comentario_selecao_menu() -> None:
+    from src.codegen.instructions import _context_comment
+
+    acao = Acao(tipo="select", obj_id="wnd[0]/mbar/menu[3]/menu[1]", label="Criar")
+    assert _context_comment(acao).text == "SELEÇÃO de item de Menu: Criar"  # type: ignore[union-attr]
+
+
+def test_radio_e_botao_nao_geram_comentario_de_contexto() -> None:
+    from src.codegen.instructions import _context_comment
+
+    assert _context_comment(Acao(tipo="select", obj_id="wnd[0]/usr/radX")) is None
+    assert _context_comment(Acao(tipo="press", obj_id="wnd[0]/tbar[0]/btn[0]")) is None
+
+
+def test_comentario_contexto_aparece_no_script_gerado() -> None:
+    acoes = [
+        Acao(tipo="property_set", obj_id="wnd[0]/tbar[0]/okcd",
+             args={"property": "text", "value": "/nME23N"}),
+    ]
+    script = get_generator("vba").gerar_script_completo(acoes, INFO)
+    assert "' NAVEGANDO para a transação: ME23N" in script
+
+
+# --------------------------------------------------------------------------- #
+# IDs relativos a wnd[N] (como o gravador nativo do SAP)
+# --------------------------------------------------------------------------- #
+def test_relative_id_remove_prefixo_da_sessao() -> None:
+    from src.codegen.instructions import relative_id
+
+    assert relative_id("/app/con[0]/ses[0]/wnd[0]/tbar[0]/okcd") == "wnd[0]/tbar[0]/okcd"
+    assert relative_id("/app/con[2]/ses[3]/wnd[1]/usr/txtX") == "wnd[1]/usr/txtX"
+    assert relative_id("wnd[0]/usr/txtX") == "wnd[0]/usr/txtX"  # já relativo
+    assert relative_id("") == ""
+
+
+def test_script_gerado_usa_ids_relativos() -> None:
+    acoes = [
+        Acao(tipo="set_text", obj_id="/app/con[0]/ses[0]/wnd[0]/usr/txtX", args={"text": "v"}),
+        Acao(tipo="press", obj_id="/app/con[0]/ses[0]/wnd[1]/tbar[0]/btn[0]"),
+    ]
+    script = get_generator("vba").gerar_script_completo(acoes, INFO)
+    assert 'FindById("wnd[0]/usr/txtX")' in script
+    assert 'FindById("wnd[1]/tbar[0]/btn[0]")' in script
+    assert "/app/con[0]/ses[0]" not in script

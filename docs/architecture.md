@@ -39,10 +39,13 @@ O Recorder usa três motores independentes que empurram `Acao` para um buffer
   de janela modal SAP. Historicamente o *polling* era a única via para
   `GuiShell` (*SAP Note 587202* — sem eventos COM no modelo antigo).
 - **`recorder_win32`** — *thread* `win32gui` que detecta diálogos `#32770`
-  nativos e injeta blocos AutoItX. Para **não** capturar modais do próprio SAP
-  GUI (`wnd[1]`, `wnd[2]` …, que surgem como `#32770` mas existem na árvore COM),
-  consulta o flag de modal do *polling* e adia a decisão por um ciclo; o AutoItX
-  fica reservado a janelas do sistema operacional externas ao SAP GUI.
+  nativos e injeta blocos AutoItX. Para **não** capturar janelas do próprio SAP
+  GUI (que surgem como `#32770` mas são dirigidas via COM), casa o **título** do
+  diálogo com as janelas SAP atuais (`ActiveWindow` + filhas) — sinal confiável
+  que cobre tanto modais `wnd[1+]` quanto popups de sistema (SAPMSSY0, ex.:
+  "Exibir logs") cujo `Children.Count` não os conta. Combina o conjunto de
+  títulos do *polling*, o flag de modal e uma leitura síncrona própria, com
+  adiamento de um ciclo. O AutoItX fica reservado a janelas do SO externas ao SAP.
 
 ### Thread safety
 

@@ -367,6 +367,11 @@ class PollingRecorder:
         #: Atualizada a cada ciclo a partir do thread COM confiável do polling;
         #: consumida pelo Win32Recorder para não capturar modais SAP via AutoItX.
         self._modal_open = False
+        #: Títulos das janelas SAP atuais (``ActiveWindow`` + filhas). Sinal mais
+        #: confiável que a contagem de filhos: popups de sistema (ex.: SAPMSSY0
+        #: "Exibir logs") aparecem no ``ActiveWindow`` mas NÃO em ``Children.Count``.
+        #: O Win32Recorder casa o título do ``#32770`` com este conjunto.
+        self._sap_titles: frozenset[str] = frozenset()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         #: Último snapshot de GuiShell por obj_id.
@@ -414,6 +419,11 @@ class PollingRecorder:
     def modal_window_open(self) -> bool:
         """``True`` se a última leitura viu uma janela modal SAP (``wnd[1]`` …)."""
         return self._modal_open
+
+    @property
+    def sap_window_titles(self) -> frozenset[str]:
+        """Títulos (stripados) das janelas SAP da última leitura do polling."""
+        return self._sap_titles
 
     def set_capture_fields(self, enabled: bool) -> None:
         """Habilita campos normais apenas como fallback quando COM falha."""
@@ -502,10 +512,10 @@ class PollingRecorder:
         # Usa a sessão re-adquirida na thread (sem cross-STA), se disponível.
         session = self._thread_session if self._thread_session is not None else self._session
 
-        # Atualiza o flag de janela modal SAP (wnd[1] …) lido pelo Win32Recorder.
-        # Feito SEMPRE (independe de capturar campos/shells) — é barato e o
-        # Win32Recorder depende dele para não capturar modais SAP via AutoItX.
-        self._modal_open = self._detect_modal(session)
+        # Atualiza o estado de janelas SAP (flag de modal + títulos) lido pelo
+        # Win32Recorder. Feito SEMPRE (independe de capturar campos/shells) — é
+        # barato e o Win32Recorder depende dele para não capturar modais via AutoItX.
+        self._modal_open, self._sap_titles = self._scan_windows(session)
 
         # ── GuiShell: usa cache para evitar build_tree() a cada ciclo ────────
         # collect_shells() chama Analyser.build_tree() que percorre TODA a árvore
@@ -801,19 +811,34 @@ class PollingRecorder:
             return f"{prog}/{title}"
         return ""
 
-    def _detect_modal(self, session: Any) -> bool:
-        """``True`` se a sessão tem janela modal aberta (``Children.Count > 1``).
+    def _scan_windows(self, session: Any) -> tuple[bool, frozenset[str]]:
+        """Lê o estado das janelas SAP: ``(há modal?, títulos)`` numa só varredura.
 
-        ``wnd[0]`` é a janela principal; qualquer filho adicional é um
-        ``GuiModalWindow`` (popup do próprio SAP). Em erro COM, preserva o último
-        valor conhecido para não oscilar durante o loop modal do SAP.
+        - ``há modal?``: ``Children.Count > 1`` (``wnd[0]`` + ``GuiModalWindow``).
+        - ``títulos``: textos de ``ActiveWindow`` e de todas as janelas filhas. O
+          ``ActiveWindow`` é o sinal mais confiável — popups de sistema (SAPMSSY0,
+          ex.: "Exibir logs") aparecem nele mesmo quando ``Children.Count`` não os
+          conta. O Win32Recorder casa o título do ``#32770`` com este conjunto.
+
+        Em erro COM, preserva os últimos valores conhecidos (não oscila durante o
+        loop modal do SAP).
         """
         try:
             children = safe_get(session, "Children")
             count = com_len(children)
-            return count > 1 if count else self._modal_open
+            titles: set[str] = set()
+            active_text = str(safe_get(safe_get(session, "ActiveWindow"), "Text", "") or "").strip()
+            if active_text:
+                titles.add(active_text)
+            for i in range(count):
+                janela = com_item(children, i)
+                texto = str(safe_get(janela, "Text", "") or "").strip()
+                if texto:
+                    titles.add(texto)
+            modal = count > 1 if count else self._modal_open
+            return modal, frozenset(titles) if titles else self._sap_titles
         except Exception:  # noqa: BLE001 - fronteira COM, best-effort
-            return self._modal_open
+            return self._modal_open, self._sap_titles
 
     @staticmethod
     def _snap_has_value(snap: dict[str, Any]) -> bool:

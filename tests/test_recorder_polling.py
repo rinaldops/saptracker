@@ -129,6 +129,35 @@ def test_poll_once_nao_captura_shells_quando_desabilitado(monkeypatch: Any) -> N
     assert chamadas == []  # collect_shells nunca chamado
 
 
+def test_scan_windows_inclui_active_window_mesmo_sem_modal() -> None:
+    """Popup de sistema (Children.Count=1) ainda expõe o título via ActiveWindow."""
+    rec = PollingRecorder(object(), lambda _a: None)
+    session = FakeComponent(
+        ActiveWindow=FakeComponent(Text="Exibir logs"),
+        Children=[FakeComponent(Text="Transferência MIGO")],
+    )
+    modal, titles = rec._scan_windows(session)
+    assert modal is False  # só 1 janela filha → sem modal contado
+    assert "Exibir logs" in titles
+    assert "Transferência MIGO" in titles
+
+
+def test_scan_windows_detecta_modal_por_contagem() -> None:
+    rec = PollingRecorder(object(), lambda _a: None)
+    session = FakeComponent(
+        ActiveWindow=FakeComponent(Text="Popup"),
+        Children=[FakeComponent(Text="Principal"), FakeComponent(Text="Popup")],
+    )
+    modal, titles = rec._scan_windows(session)
+    assert modal is True
+    assert titles == frozenset({"Popup", "Principal"})
+
+
+def test_sap_window_titles_property_default_vazio() -> None:
+    rec = PollingRecorder(object(), lambda _a: None)
+    assert rec.sap_window_titles == frozenset()
+
+
 def test_set_capture_shells_alterna_flag() -> None:
     rec = PollingRecorder(object(), lambda _a: None, capture_shells=False)
     assert rec._capture_shells is False

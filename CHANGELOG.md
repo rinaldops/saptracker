@@ -6,6 +6,31 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.2.0] - 2026-06-20
+
+### Adicionado
+- **Comentários de contexto no código gerado.** Três transições de tela viram
+  comentários que ajudam o desenvolvedor a se localizar: entrar numa transação
+  (`' NAVEGANDO para a transação: XXX`, a partir do okcd), trocar de aba
+  (`' SELEÇÃO de aba: XXX`) e selecionar item de menu (`' SELEÇÃO de item de
+  Menu: XXX`). O rótulo legível de aba/menu é capturado na gravação (novo campo
+  `Acao.label`). Lógica neutra de linguagem (em `translate`).
+
+### Alterado
+- **IDs relativos a `wnd[N]` no código gerado.** O prefixo da sessão
+  (`/app/con[N]/ses[M]/`) é removido na renderização — como faz o gravador
+  nativo do SAP GUI —, deixando o script mais limpo (`session.FindById("wnd[0]/…")`).
+  O `Acao.obj_id` interno permanece absoluto (usado por `FindById`/highlight e
+  pela deduplicação).
+
+### Corrigido
+- **Popup de sistema do SAP capturado via AutoItX** (ex.: SAPMSSY0 "Exibir
+  logs"). Esses popups aparecem no `ActiveWindow` mas **não** na contagem
+  `Children.Count`, então a detecção por contagem falhava e o AutoItX os
+  capturava. A decisão passou a casar o **título** do `#32770` com as janelas
+  SAP atuais (`ActiveWindow` + filhas) — sinal confiável —, combinando o conjunto
+  de títulos do polling, o flag de modal e uma leitura síncrona própria.
+
 ## [1.1.0] - 2026-06-20
 
 ### Adicionado

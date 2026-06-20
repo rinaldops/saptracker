@@ -8,6 +8,7 @@ delegando sua introspecção ao handler apropriado. Também oferece o *highlight
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,6 +29,8 @@ MAX_DEPTH = 64
 #: Máximo de linhas/itens de conteúdo de um GuiShell exibidos na árvore (o
 #: conteúdo completo continua disponível no painel de detalhes via ``inspect``).
 SHELL_TREE_MAX_ITEMS = 50
+
+ProgressCallback = Callable[[int, int], None]
 
 
 @dataclass
@@ -94,8 +97,11 @@ class Analyser:
     # ------------------------------------------------------------------ #
     # Percurso da árvore
     # ------------------------------------------------------------------ #
-    def build_tree(self) -> ObjectNode:
+    def build_tree(self, progress_callback: ProgressCallback | None = None) -> ObjectNode:
         """Constrói a árvore de objetos a partir da sessão.
+
+        Quando ``progress_callback`` é informado, faz uma contagem leve da
+        hierarquia COM e reporta ``(processados, total)`` durante o percurso.
 
         Returns:
             Nó raiz representando a própria sessão (com as janelas como filhos).
@@ -107,7 +113,21 @@ class Analyser:
             text="Sessão SAP",
         )
         children = safe_get(self._session, "Children")
-        self._append_children(root, children, depth=0)
+        total = 1 + self._count_nodes(children, depth=0) if progress_callback else 0
+        processed = [1]
+        if progress_callback is not None:
+            progress_callback(0, total)
+            progress_callback(1, total)
+        self._append_children(
+            root,
+            children,
+            depth=0,
+            progress_callback=progress_callback,
+            processed=processed,
+            total=total,
+        )
+        if progress_callback is not None:
+            progress_callback(total, total)
         todos = root.flatten()
         shells = [n for n in todos if n.is_shell]
         logger.info(
@@ -116,7 +136,28 @@ class Analyser:
         )
         return root
 
-    def _append_children(self, parent: ObjectNode, collection: Any, depth: int) -> None:
+    def _count_nodes(self, collection: Any, depth: int) -> int:
+        """Conta a hierarquia COM sem executar introspecção de GuiShell."""
+        if collection is None or depth >= MAX_DEPTH:
+            return 0
+        total = 0
+        for index in range(com_len(collection)):
+            obj = com_item(collection, index)
+            if obj is None:
+                continue
+            total += 1
+            total += self._count_nodes(safe_get(obj, "Children"), depth + 1)
+        return total
+
+    def _append_children(
+        self,
+        parent: ObjectNode,
+        collection: Any,
+        depth: int,
+        progress_callback: ProgressCallback | None = None,
+        processed: list[int] | None = None,
+        total: int = 0,
+    ) -> None:
         """Itera sobre uma ``GuiComponentCollection`` adicionando subnós."""
         if collection is None or depth >= MAX_DEPTH:
             return
@@ -130,10 +171,20 @@ class Analyser:
             # vem por ``Children`` COM — é introspectado pelo handler dedicado.
             if node.shell_supported:
                 self._append_shell_content(node, obj)
+            if progress_callback is not None and processed is not None:
+                processed[0] += 1
+                progress_callback(processed[0], total)
             # Recursão apenas em containers (objetos com Children).
             sub = safe_get(obj, "Children")
             if sub is not None:
-                self._append_children(node, sub, depth + 1)
+                self._append_children(
+                    node,
+                    sub,
+                    depth + 1,
+                    progress_callback,
+                    processed,
+                    total,
+                )
 
     def _node_from_obj(self, obj: Any) -> ObjectNode:
         """Cria um ``ObjectNode`` a partir de um objeto COM SAP."""

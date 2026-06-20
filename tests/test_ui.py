@@ -141,9 +141,14 @@ class _FakeAnalyser:
         self._on_build = on_build
         self.highlights: list[tuple[str, bool]] = []
 
-    def build_tree(self):  # type: ignore[no-untyped-def]
+    def build_tree(self, progress_callback=None):  # type: ignore[no-untyped-def]
+        if progress_callback is not None:
+            progress_callback(0, 3)
+            progress_callback(1, 3)
         if self._on_build is not None:
             self._on_build()
+        if progress_callback is not None:
+            progress_callback(3, 3)
         return self._root
 
     def inspect(self, obj_id: str) -> dict:

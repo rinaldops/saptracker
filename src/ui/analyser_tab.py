@@ -83,6 +83,7 @@ class AnalyserTab(QWidget):
         self._search_idx: int = -1
         self._last_query: str = ""
         self._column_widths_initialized = False
+        self._last_analysis_percent = -1
         self._build_ui()
         ctx.sessionChanged.connect(self._on_session_changed)
 
@@ -114,7 +115,8 @@ class AnalyserTab(QWidget):
         self.analysis_status.setVisible(False)
         processamento.addWidget(self.analysis_status)
         self.analysis_progress = QProgressBar()
-        self.analysis_progress.setRange(0, 0)
+        self.analysis_progress.setRange(0, 100)
+        self.analysis_progress.setValue(0)
         self.analysis_progress.setTextVisible(False)
         self.analysis_progress.setVisible(False)
         processamento.addWidget(self.analysis_progress, 1)
@@ -198,6 +200,7 @@ class AnalyserTab(QWidget):
             self.btn_find,
         ):
             b.setEnabled(tem_arvore)
+        self.tree.setEnabled(tem_arvore)
         self.search.setEnabled(tem_arvore)
 
     # ------------------------------------------------------------------ #
@@ -213,12 +216,18 @@ class AnalyserTab(QWidget):
         self._ctx.statusMessage.emit("Analisando sessão… aguarde.")
         self.btn_analyse.setEnabled(False)
         self.btn_analyse.setText("Analisando…")
+        self.tree.setEnabled(False)
+        self.search.setEnabled(False)
+        for button in (self.btn_copy_id, self.btn_json, self.btn_csv, self.btn_find):
+            button.setEnabled(False)
+        self._last_analysis_percent = -1
+        self.analysis_progress.setValue(0)
         self.analysis_status.setVisible(True)
         self.analysis_progress.setVisible(True)
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         QApplication.processEvents()  # pinta a mensagem/cursor antes de bloquear
         try:
-            self._root = self._analyser.build_tree()
+            self._root = self._analyser.build_tree(self._on_analysis_progress)
             self.tree.clear()
             root_item = self._make_item(self._root)
             self.tree.addTopLevelItem(root_item)
@@ -237,13 +246,22 @@ class AnalyserTab(QWidget):
             self.analysis_status.setVisible(False)
             self.analysis_progress.setVisible(False)
             self.btn_analyse.setText("Analisar sessão")
-            self.btn_analyse.setEnabled(True)
+            self._update_enabled()
 
         self._reset_search()
         self._highlighted_id = ""
         self._update_enabled()
         total = len(self._root.flatten())
         self._ctx.statusMessage.emit(f"Árvore construída: {total} objetos.")
+
+    def _on_analysis_progress(self, processed: int, total: int) -> None:
+        """Atualiza e repinta a barra conforme os objetos são percorridos."""
+        percent = 0 if total <= 0 else min(100, (processed * 100) // total)
+        if percent == self._last_analysis_percent:
+            return
+        self._last_analysis_percent = percent
+        self.analysis_progress.setValue(percent)
+        QApplication.processEvents()
 
     def _make_item(self, node: ObjectNode) -> QTreeWidgetItem:
         label = node.text or node.name or node.type
@@ -355,7 +373,6 @@ class AnalyserTab(QWidget):
         if self._analyser is not None and self._highlighted_id:
             self._analyser.highlight(self._highlighted_id, on=False)
             self._highlighted_id = ""
-            self._ctx.statusMessage.emit("Destaque removido.")
 
     def copy_selected_id(self) -> None:
         obj_id = self._selected_id()

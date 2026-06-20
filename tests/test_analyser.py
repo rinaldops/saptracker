@@ -102,6 +102,16 @@ def test_build_tree_estrutura_e_posicao() -> None:
     assert grid.shell_supported is True
 
 
+def test_build_tree_reporta_progresso() -> None:
+    progresso: list[tuple[int, int]] = []
+    Analyser(_session_com_arvore()).build_tree(
+        lambda atual, total: progresso.append((atual, total))
+    )
+    assert progresso[0] == (0, 3)
+    assert progresso[-1] == (3, 3)
+    assert [atual for atual, _ in progresso] == sorted(atual for atual, _ in progresso)
+
+
 def test_flatten_e_to_dict() -> None:
     root = Analyser(_session_com_arvore()).build_tree()
     nos = root.flatten()

@@ -78,14 +78,18 @@ def com_len(collection: Any) -> int:
                 return int(value)
             except (TypeError, ValueError):
                 continue
-    return 0
+    try:
+        return len(collection)
+    except (TypeError, ValueError, _COMError):
+        return 0
 
 
 def com_item(collection: Any, index: int, default: Any = None) -> Any:
     """Retorna o elemento ``index`` de uma coleção COM, tolerante à API.
 
-    Tenta ``ElementAt(index)`` (SAP), depois ``Item(index)`` e, por fim, o
-    indexador padrão ``collection(index)``. Retorna ``default`` se nada servir.
+    Tenta ``ElementAt(index)`` (SAP), ``Item(index)``, o indexador
+    ``collection[index]`` e, por fim, ``collection(index)``. Isso inclui os
+    ``SAFEARRAY`` convertidos pelo pywin32 em tuplas/listas Python.
     """
     if collection is None:
         return default
@@ -95,5 +99,12 @@ def com_item(collection: Any, index: int, default: Any = None) -> Any:
             value = safe_com_call(func, index)
             if value is not None:
                 return value
-    value = safe_com_call(lambda: collection(index))
+    try:
+        return collection[index]
+    except (TypeError, KeyError, IndexError, AttributeError, _COMError):
+        pass
+    try:
+        value = collection(index)
+    except (TypeError, AttributeError, _COMError):
+        return default
     return default if value is None else value

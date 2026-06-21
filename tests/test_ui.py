@@ -64,6 +64,20 @@ def test_api_ref_filtra(janela) -> None:  # type: ignore[no-untyped-def]
     assert aba.lista.count() == total
 
 
+def test_api_ref_inclui_novos_objetos_e_multiplos_exemplos(janela) -> None:  # type: ignore[no-untyped-def]
+    aba = janela.api_ref_tab
+    nomes = {aba.lista.item(i).text() for i in range(aba.lista.count())}
+    # Objetos adicionados na expansão da referência.
+    for esperado in ("GuiComboBox", "GuiOkCodeField", "GuiSessionInfo", "GuiCalendar"):
+        assert esperado in nomes
+    # Filtrar ComboBox mostra o objeto e seus exemplos rotulados.
+    aba.search.setText("ComboBox")
+    assert [aba.lista.item(i).text() for i in range(aba.lista.count())] == ["GuiComboBox"]
+    detalhe = aba.detalhe.toPlainText()
+    assert "Exemplos" in detalhe
+    assert "Selecionar por chave" in detalhe and "Ler valor exibido" in detalhe
+
+
 def test_combo_linguagens_vba_primeiro(janela) -> None:  # type: ignore[no-untyped-def]
     combo = janela.recorder_tab.combo
     assert combo.count() >= 6

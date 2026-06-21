@@ -1,6 +1,6 @@
 # SAP GUI Scripting Tool
 
-[![Versão](https://img.shields.io/badge/vers%C3%A3o-1.2.0-2E75B6)](CHANGELOG.md)
+[![Versão](https://img.shields.io/badge/vers%C3%A3o-1.3.0-2E75B6)](CHANGELOG.md)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-375623)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-1F3864)](pyproject.toml)
 [![CI](https://github.com/rinaldops/saptracker/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)

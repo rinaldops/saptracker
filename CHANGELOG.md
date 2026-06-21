@@ -6,6 +6,16 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.3.0] - 2026-06-20
+
+### Adicionado
+- **Aba "Referência da API" expandida.** De 10 para **21 objetos** SAP GUI
+  Scripting, incluindo `GuiComboBox`, `GuiCheckBox`, `GuiRadioButton`,
+  `GuiOkCodeField`, `GuiTab/GuiTabStrip`, `GuiCalendar`, `GuiToolbarControl`,
+  `GuiPasswordField`, `GuiMenu`, `GuiLabel` e `GuiSessionInfo`. Cada objeto
+  passou a suportar **múltiplos exemplos rotulados** (`ApiEntry.examples`) —
+  31 exemplos no total, com escape de HTML nos blocos de código.
+
 ## [1.2.0] - 2026-06-20
 
 ### Adicionado

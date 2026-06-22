@@ -5,9 +5,9 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-1F3864)](pyproject.toml)
 [![CI](https://github.com/rinaldops/saptracker/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 
-Esta é uma solução para Windows de **análise e gravação de SAP GUI Scripting**, desenvolvida como uma alternativa de código aberto em relaçao ao descontinuado *Scripting Tracker* (Stefan Schnell, 2024). Percorre a árvore de objetos de uma sessão SAP, grava interações do usuário e gera scripts de automação prontos em **seis linguagens**.
+Esta é uma solução para Windows de **análise e gravação de SAP GUI Scripting**, desenvolvida como uma alternativa de código aberto em relação ao descontinuado *Scripting Tracker* (Stefan Schnell, 2024). Percorre a árvore de objetos de uma sessão SAP, grava interações do usuário e gera scripts de automação prontos em **seis linguagens**.
 
-> 📷 *Captura de tela da interface a ser adicionada em `docs/_static/screenshot.png`.*
+![Captura de tela da interface da SAP GUI Scripting Tool](docs/_static/screenshot.png)
 
 ## O que faz de diferente do Scripting Tracker
 

@@ -49,6 +49,10 @@ autodoc_typehints = "description"
 autodoc_member_order = "bysource"
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
+# Renderiza a seção ``Attributes:`` como campos ``:ivar:`` na docstring da
+# classe em vez de diretivas ``.. attribute::``. Evita "duplicate object
+# description" quando autodoc também documenta o mesmo atributo via :members:.
+napoleon_use_ivar = True
 
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
 

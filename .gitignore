@@ -6,6 +6,8 @@ __pycache__/
 build/
 dist/
 *.spec
+# Exceção: a spec do PyInstaller é versionada (usada pelo build e pelos testes).
+!sap_scripting_tool.spec
 
 # Virtual envs
 .venv/

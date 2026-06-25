@@ -79,8 +79,11 @@ acompanha a do interpretador Python usado no build.
    clique em outra sessão para trocar a conexão usada pela aplicação.
 4. Na aba **Analisador**, clique em **Analisar sessão** (ou pressione **F5**).
    A barra de progresso acompanha os objetos processados. Use a busca para
-   localizar por nome, texto, tipo ou ID e pressione **Próximo** para percorrer
-   os resultados, expandindo automaticamente a hierarquia. Pressione o botão
+   localizar por nome, texto, tipo, ID ou valores internos de `GuiTree` (por
+   exemplo, a coluna `TECH_KEY` da CJ20N) e pressione **Próximo** para percorrer
+   os resultados, expandindo automaticamente a hierarquia. Quando o termo está
+   no JSON de detalhes, o painel lateral também rola até a ocorrência e a
+   seleciona. Pressione o botão
    direito sobre uma linha para destacar o objeto no SAP; ao soltá-lo, a
    moldura desaparece. **Copiar ID** ou **Ctrl+C** envia o ID para a área de
    transferência.
@@ -107,7 +110,7 @@ introspecção do conteúdo interno e detecta mudanças para o Gravador:
 | Tipo SAP | O que é inspecionado |
 | --- | --- |
 | `GuiGridView` (ALV Grid) | Colunas, linhas, valores de célula, célula atual, linhas selecionadas e primeira linha visível; aceita coleções COM e `SAFEARRAY` |
-| `GuiTree` | Chaves de nós, texto por chave, hierarquia de filhos, colunas e *item text* |
+| `GuiTree` | Chaves de nós, texto por chave, hierarquia de filhos, colunas e *item text*; valores de colunas como `TECH_KEY` também entram na busca do Analisador |
 | `GuiTextEdit` | Número de linhas, primeira linha visível, texto selecionado, conteúdo atual |
 | `GuiCalendar` | Data de foco, intervalo de seleção, primeiro e último dia visível |
 | `GuiToolbarControl` | Botões disponíveis, *tooltips* e estado de habilitação |

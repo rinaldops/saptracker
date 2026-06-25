@@ -177,15 +177,21 @@ def test_shell_content_nodes_tree_reconstroi_hierarquia() -> None:
     analyser = Analyser(object())
     data = {
         "nos": [
-            {"chave": "r", "texto": "Raiz", "filhos": ["a", "b"]},
-            {"chave": "a", "texto": "A", "filhos": []},
-            {"chave": "b", "texto": "B", "filhos": []},
+            {
+                "chave": "r",
+                "texto": "Raiz",
+                "filhos": ["a", "b"],
+                "colunas": {"TECH_KEY": "IN-3534-25-004"},
+            },
+            {"chave": "a", "texto": "A", "filhos": [], "colunas": {}},
+            {"chave": "b", "texto": "B", "filhos": [], "colunas": {}},
         ]
     }
     roots = analyser._shell_content_nodes("GuiTree", data, "shellid")
     assert len(roots) == 1  # só a raiz no topo
     raiz = roots[0]
     assert raiz.text == "r: Raiz"
+    assert raiz.search_text == "TECH_KEY IN-3534-25-004"
     assert [c.name for c in raiz.children] == ["a", "b"]
 
 

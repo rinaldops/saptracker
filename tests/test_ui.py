@@ -259,6 +259,59 @@ def test_busca_considera_nome_nao_exibido(janela) -> None:  # type: ignore[no-un
     assert aba.tree.currentItem().data(0, Qt.ItemDataRole.UserRole) == "a"
 
 
+def test_busca_considera_texto_extra_nao_exibido(janela) -> None:  # type: ignore[no-untyped-def]
+    from src.core.analyser import ObjectNode
+
+    root = ObjectNode(
+        id="r",
+        type="GuiSession",
+        children=[
+            ObjectNode(
+                id="tree",
+                type="GuiTreeNode",
+                name="000017",
+                text="000017: Projeto executivo PROD1 - Perf",
+                search_text="TECH_KEY 1001544250",
+            )
+        ],
+    )
+    fake = _FakeAnalyser(root)
+    aba = _preparar_analyser_tab(janela, fake)
+    aba.search.setText("1001544250")
+    aba.find_next()
+    assert aba.tree.currentItem().data(0, Qt.ItemDataRole.UserRole) == "tree"
+    assert "1001544250" not in aba.tree.currentItem().text(0)
+
+
+def test_busca_revela_termo_no_painel_de_detalhes(janela) -> None:  # type: ignore[no-untyped-def]
+    from src.core.analyser import ObjectNode
+
+    root = ObjectNode(
+        id="r",
+        type="GuiSession",
+        children=[
+            ObjectNode(
+                id="tree",
+                type="GuiTreeNode",
+                text="000017: Projeto executivo PROD1 - Perf",
+                search_text="TECH_KEY 1001544250",
+            )
+        ],
+    )
+    fake = _FakeAnalyser(root)
+    fake.inspect = lambda obj_id: {  # type: ignore[method-assign]
+        "id": obj_id,
+        "padding": ["linha sem match"] * 80,
+        "shell": {"nos": [{"colunas": {"TECH_KEY": "1001544250"}}]},
+    }
+    aba = _preparar_analyser_tab(janela, fake)
+
+    aba.search.setText("1001544250")
+    aba.find_next()
+
+    assert aba.details.textCursor().selectedText() == "1001544250"
+
+
 def test_analyse_exibe_estado_de_processamento(janela) -> None:  # type: ignore[no-untyped-def]
     estados: list[tuple[bool, bool, str]] = []
     aba = janela.analyser_tab

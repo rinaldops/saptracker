@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QMouseEvent, QShowEvent
+from PyQt6.QtGui import QCursor, QMouseEvent, QShowEvent, QTextCursor
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -270,7 +270,7 @@ class AnalyserTab(QWidget):
         item.setData(
             0,
             _SEARCH_ROLE,
-            " ".join((node.id, node.type, node.name, node.text)).casefold(),
+            " ".join((node.id, node.type, node.name, node.text, node.search_text)).casefold(),
         )
         for child in node.children:
             item.addChild(self._make_item(child))
@@ -309,7 +309,8 @@ class AnalyserTab(QWidget):
         Recalcula os resultados quando o termo muda; do contrário, avança
         ciclicamente, revelando (expandindo) cada objeto na hierarquia.
         """
-        query = self.search.text().strip().casefold()
+        raw_query = self.search.text().strip()
+        query = raw_query.casefold()
         if not query:
             return
         if query != self._last_query:
@@ -321,6 +322,7 @@ class AnalyserTab(QWidget):
             return
         self._search_idx = (self._search_idx + 1) % len(self._search_matches)
         self._reveal(self._search_matches[self._search_idx])
+        self._scroll_details_to_match(raw_query)
         self._ctx.statusMessage.emit(
             f"Busca “{query}”: {self._search_idx + 1} de {len(self._search_matches)}."
         )
@@ -350,6 +352,20 @@ class AnalyserTab(QWidget):
             pai = pai.parent()
         self.tree.setCurrentItem(item)
         self.tree.scrollToItem(item)
+
+    def _scroll_details_to_match(self, query: str) -> None:
+        """Seleciona e revela a primeira ocorrência do termo no painel de detalhes."""
+        if not query:
+            return
+        text = self.details.toPlainText()
+        start = text.casefold().find(query.casefold())
+        if start < 0:
+            return
+        cursor = self.details.textCursor()
+        cursor.setPosition(start)
+        cursor.setPosition(start + len(query), QTextCursor.MoveMode.KeepAnchor)
+        self.details.setTextCursor(cursor)
+        self.details.ensureCursorVisible()
 
     # ------------------------------------------------------------------ #
     # Destaque (highlight) — apenas um objeto ativo por vez

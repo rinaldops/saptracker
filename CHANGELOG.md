@@ -6,6 +6,16 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- Busca do **Analisador** passa a indexar valores internos de colunas dos nós de
+  `GuiTree`, incluindo identificadores como `TECH_KEY` na CJ20N, sem poluir o
+  rótulo exibido na árvore.
+
+### Alterado
+- Ao navegar pelos resultados da busca, o painel de detalhes em JSON também
+  seleciona e rola até a ocorrência encontrada, reduzindo a inspeção manual em
+  árvores grandes.
+
 ## [1.3.0] - 2026-06-20
 
 ### Adicionado

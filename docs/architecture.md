@@ -72,6 +72,12 @@ para alimentar a barra de progresso com objetos processados/total. O destaque
 usa `Visualize(True)` enquanto o botão direito permanece pressionado sobre uma
 linha da árvore e `Visualize(False)` quando o botão é solto.
 
+Nós sintéticos de `GuiShell` podem carregar texto adicional em `search_text`.
+Esse campo entra no índice da busca do Analisador, mas não altera o rótulo
+exibido na árvore. Em `GuiTree`, isso permite localizar valores de colunas como
+`TECH_KEY` da CJ20N. Ao navegar por um resultado, o painel de detalhes em JSON
+também seleciona e rola até a ocorrência encontrada, quando ela está presente.
+
 ### Codegen extensível
 
 `CodeGenerator` é uma classe abstrata; cada linguagem é uma subclasse

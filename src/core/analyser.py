@@ -45,6 +45,7 @@ class ObjectNode:
         top, left, width, height: Posição e dimensões em pixels (0 se N/A).
         is_shell: ``True`` se o objeto é um GuiShell.
         shell_supported: ``True`` se há handler dedicado para o tipo.
+        search_text: Texto adicional indexado pela busca, sem alterar o rótulo exibido.
         children: Subnós.
     """
 
@@ -58,6 +59,7 @@ class ObjectNode:
     height: int = 0
     is_shell: bool = False
     shell_supported: bool = False
+    search_text: str = ""
     children: list[ObjectNode] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -73,6 +75,7 @@ class ObjectNode:
             "height": self.height,
             "is_shell": self.is_shell,
             "shell_supported": self.shell_supported,
+            "search_text": self.search_text,
             "children": [c.to_dict() for c in self.children],
         }
 
@@ -325,7 +328,20 @@ class Analyser:
             chave = str(no.get("chave", ""))
             texto = str(no.get("texto", ""))
             rotulo = f"{chave}: {texto}" if texto else chave
-            por_chave[chave] = ObjectNode(id=parent_id, type="GuiTreeNode", name=chave, text=rotulo)
+            colunas = no.get("colunas", {})
+            if isinstance(colunas, dict):
+                valores_colunas = [
+                    f"{nome} {valor}" for nome, valor in colunas.items() if str(valor)
+                ]
+            else:
+                valores_colunas = []
+            por_chave[chave] = ObjectNode(
+                id=parent_id,
+                type="GuiTreeNode",
+                name=chave,
+                text=rotulo,
+                search_text=" ".join(valores_colunas),
+            )
 
         filhos_de: set[str] = set()
         for no in nos:

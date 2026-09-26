@@ -1,5 +1,16 @@
 # SAP GUI Scripting Tool
 
+## Referência do checkout — 2026-09-26
+
+`pyproject.toml` declara 1.3.0, Python >=3.10 e o entrypoint
+`sap-scripting-tool = src.main:main`. O analisador/gravador é desktop Windows;
+Fiori e WebGUI pertencem ao projeto FIORI-AUTO. Os testes usam fakes COM;
+`python -m pytest -m "not sap_live"` seleciona a validação local sem sessão SAP.
+O metadado Homepage/Issues do pyproject ainda contém URLs example; use o
+repositório do projeto indicado nesta página para suporte.
+
+Esta revisão documental não iniciou a interface nem gravou uma sessão SAP.
+
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-1.3.0-2E75B6)](CHANGELOG.md)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-375623)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-1F3864)](pyproject.toml)

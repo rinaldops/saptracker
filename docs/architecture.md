@@ -1,5 +1,9 @@
 # Arquitetura
 
+> Referência estática conferida em 2026-09-26. Versão/entrypoint e limites de
+> execução estão no [README](../README.md). Testes com fakes validam contratos
+> locais; compatibilidade com uma versão de SAP GUI exige teste no ambiente.
+
 Este documento resume as decisões de design da SAP GUI Scripting Tool. A
 especificação completa está em `doc/SAP_GUI_Scripting_Tool_Especificacao.docx`.
 

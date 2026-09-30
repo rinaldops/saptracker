@@ -306,7 +306,9 @@ class Analyser:
                 valores = " | ".join(str(linha.get(c, "")) for c in colunas) if colunas \
                     else " | ".join(str(v) for v in linha.values())
                 grupo.children.append(
-                    ObjectNode(id=parent_id, type="GuiGridRow", text=f"[{i}] {valores}")
+                    ObjectNode(
+                        id=parent_id, type="GuiGridRow", name=str(i), text=f"[{i}] {valores}"
+                    )
                 )
             if len(linhas) > SHELL_TREE_MAX_ITEMS:
                 restante = len(linhas) - SHELL_TREE_MAX_ITEMS
@@ -423,3 +425,26 @@ class Analyser:
         if selected is None:
             return False
         return any(str(com_item(selected, i)) == key for i in range(com_len(selected)))
+
+    # ------------------------------------------------------------------ #
+    # Seleção de linha (GuiGridView)
+    # ------------------------------------------------------------------ #
+    def select_row(self, obj_id: str, row: int) -> bool:
+        """Seleciona uma linha de uma ``GuiGridView`` (célula atual + seleção).
+
+        ``GuiGridView`` também não expõe ``Visualize`` por linha — usa o
+        mesmo par ``SetCurrentCell``/``SelectedRows`` que o Recorder já grava
+        como ``set_current_cell``/``set_selected_rows``: o primeiro rola até a
+        linha e move o foco; o segundo desenha a seleção (barra de destaque).
+
+        Returns:
+            ``True`` se, após o comando, ``CurrentCellRow`` passou a ser
+            ``row`` (``SetCurrentCell`` não expõe erro próprio).
+        """
+        obj = self.find_by_id(obj_id)
+        if obj is None:
+            return False
+        safe_com_call(lambda: obj.SetCurrentCell(row, ""))
+        safe_com_call(lambda: setattr(obj, "SelectedRows", str(row)))
+        atual = safe_get(obj, "CurrentCellRow", -1)
+        return bool(atual == row)

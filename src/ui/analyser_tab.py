@@ -365,10 +365,12 @@ class AnalyserTab(QWidget):
     def _highlight_item(self, item: QTreeWidgetItem) -> None:
         """Destaca no SAP o item pressionado com o botão direito.
 
-        Quando o item é um nó sintético de ``GuiTree`` (o destaque marca o
-        controle inteiro, não a linha), também seleciona o nó de verdade na
-        árvore do SAP (``SelectNode``) — mesmo recurso oferecido à IA pela
-        CLI (``select-node``).
+        ``GuiTree``/``GuiGridView`` não expõem ``Visualize`` por linha/nó (só o
+        controle inteiro tem posição própria) — para os nós sintéticos
+        ``GuiTreeNode``/``GuiGridRow``, além do destaque, também seleciona o
+        nó/linha de verdade no SAP (``SelectNode``/``SetCurrentCell`` +
+        ``SelectedRows``) — mesmo recurso oferecido à IA pela CLI
+        (``select-node``/``select-row``).
         """
         if self._analyser is None:
             return
@@ -382,12 +384,19 @@ class AnalyserTab(QWidget):
         if destacado:
             self._highlighted_id = obj_id
 
-        eh_no_de_tree = item.data(0, _TYPE_ROLE) == "GuiTreeNode"
-        key = str(item.data(0, _NAME_ROLE) or "") if eh_no_de_tree else ""
-        selecionado = bool(key) and self._analyser.select_node(obj_id, key)
+        tipo = item.data(0, _TYPE_ROLE)
+        nome = str(item.data(0, _NAME_ROLE) or "")
+        selecionado = False
+        detalhe = ""
+        if tipo == "GuiTreeNode" and nome:
+            selecionado = self._analyser.select_node(obj_id, nome)
+            detalhe = f"nó '{nome}'"
+        elif tipo == "GuiGridRow" and nome.isdigit():
+            selecionado = self._analyser.select_row(obj_id, int(nome))
+            detalhe = f"linha {nome}"
 
         if destacado and selecionado:
-            self._ctx.statusMessage.emit(f"Destaque em {obj_id} — nó '{key}' selecionado.")
+            self._ctx.statusMessage.emit(f"Destaque em {obj_id} — {detalhe} selecionado(a).")
         elif destacado:
             self._ctx.statusMessage.emit(f"Destaque em {obj_id}.")
 

@@ -8,17 +8,18 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### Adicionado
 - **CLI headless (`sap-scripting-tool-cli`).** Comandos `snapshot`, `inspect`,
-  `highlight` e `select-node` expõem o `Analyser` sem abrir a interface Qt,
-  para uso por agentes de IA/automação (ver skill
-  `app-devs/_skills/sap-gui-snapshot`). `select-node` seleciona um nó de
-  `GuiTree` pela chave (`SelectNode` + confirmação via `GetSelectedNodes`) —
-  o equivalente real da API a "destacar" um nó, já que `GuiTree` não expõe
-  `Visualize` por nó.
+  `highlight`, `select-node` e `select-row` expõem o `Analyser` sem abrir a
+  interface Qt, para uso por agentes de IA/automação (ver skill
+  `app-devs/_skills/sap-gui-snapshot`). `select-node`/`select-row` selecionam
+  um nó de `GuiTree` pela chave ou uma linha de `GuiGridView` pelo índice —
+  o equivalente real da API a "destacar" um nó/linha, já que nenhum dos dois
+  controles expõe `Visualize` por nó/linha (só o controle inteiro).
 - **Destaque com botão direito na aba Analisador também seleciona o nó em
-  `GuiTree`.** O destaque (`Visualize`) marca o controle da árvore inteiro,
-  não a linha específica — ao destacar um `GuiTreeNode`, a UI agora também
-  chama `SelectNode` (mesmo recurso já exposto à IA via `select-node`),
-  destacando de verdade qual nó foi encontrado/clicado.
+  `GuiTree` ou a linha em `GuiGridView`.** O destaque (`Visualize`) marca o
+  controle inteiro (árvore ou grid), não a linha/nó específico — ao destacar
+  um `GuiTreeNode`, a UI agora também chama `SelectNode`; ao destacar um
+  `GuiGridRow`, chama `SetCurrentCell`/`SelectedRows` (comando `select-row`
+  da CLI) — destacando de verdade qual nó/linha foi encontrado/clicado.
 
 ### Corrigido
 - **Busca do Analisador (UI) e `snapshot` não encontravam códigos de colunas

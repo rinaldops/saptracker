@@ -155,6 +155,7 @@ class _FakeAnalyser:
         self._on_build = on_build
         self.highlights: list[tuple[str, bool]] = []
         self.select_nodes: list[tuple[str, str]] = []
+        self.select_rows: list[tuple[str, int]] = []
 
     def build_tree(self, progress_callback=None):  # type: ignore[no-untyped-def]
         if progress_callback is not None:
@@ -175,6 +176,10 @@ class _FakeAnalyser:
 
     def select_node(self, obj_id: str, key: str) -> bool:
         self.select_nodes.append((obj_id, key))
+        return True
+
+    def select_row(self, obj_id: str, row: int) -> bool:
+        self.select_rows.append((obj_id, row))
         return True
 
 
@@ -249,6 +254,32 @@ def test_destaque_em_no_de_tree_tambem_seleciona_no_real(janela, qtbot) -> None:
 
     assert fake.highlights == [("shell1", True)]
     assert fake.select_nodes == [("shell1", "000013")]
+
+
+def test_destaque_em_linha_de_grid_tambem_seleciona_linha_real(janela, qtbot) -> None:  # type: ignore[no-untyped-def]
+    """Destacar um GuiGridRow sintético também chama SetCurrentCell (via select_row)."""
+    from src.core.analyser import ObjectNode
+
+    arvore = ObjectNode(
+        id="r",
+        type="GuiSession",
+        children=[
+            ObjectNode(id="shell1", type="GuiGridRow", name="2", text="[2] MAT003 | 7"),
+        ],
+    )
+    fake = _FakeAnalyser(arvore)
+    aba = _preparar_analyser_tab(janela, fake)
+    raiz = aba.tree.topLevelItem(0)
+    item_linha = raiz.child(0)
+    aba.tree.expandAll()
+    aba.tree.doItemsLayout()
+
+    posicao = aba.tree.visualItemRect(item_linha).center()
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao)
+
+    assert fake.highlights == [("shell1", True)]
+    assert fake.select_rows == [("shell1", 2)]
+    assert fake.select_nodes == []  # não é GuiTreeNode: select_node não é chamado
 
 
 def test_colunas_do_analisador_iniciam_em_dois_tercos(janela) -> None:  # type: ignore[no-untyped-def]

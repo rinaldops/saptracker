@@ -159,6 +159,8 @@ def test_arvore_lista_conteudo_do_grid() -> None:
 
     linhas = next(c for c in grid_node.children if c.type == "GuiGridRows")
     assert linhas.children[0].text == "[0] MAT001 | 10"
+    # name = índice da linha (usado por select_row); "1" na segunda linha.
+    assert [c.name for c in linhas.children] == ["0", "1"]
     # Nós sintéticos herdam o id do shell (selecionar mostra detalhes do controle).
     assert colunas.children[0].id == grid.Id
 
@@ -324,3 +326,43 @@ def test_select_node_nao_confirma_chave_inexistente() -> None:
     tree = FakeTreeObj(valid_keys=frozenset({"000099"}))
     analyser = Analyser(FakeSessionFind({tree.Id: tree}))
     assert analyser.select_node(tree.Id, "000013") is False
+
+
+# --------------------------------------------------------------------------- #
+# select_row
+# --------------------------------------------------------------------------- #
+class FakeGridSelectable:
+    """``GuiGridView`` falso: ``SetCurrentCell`` muda ``CurrentCellRow``.
+
+    ``row_count`` simula uma grade com poucas linhas: ``SetCurrentCell`` fora
+    do intervalo não tem efeito (imita o SAP recusando uma linha inexistente).
+    """
+
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+
+    def __init__(self, row_count: int = 5) -> None:
+        self._row_count = row_count
+        self.CurrentCellRow = -1
+        self.SelectedRows = ""
+
+    def SetCurrentCell(self, row: int, _column: str) -> None:
+        if 0 <= row < self._row_count:
+            self.CurrentCellRow = row
+
+
+def test_select_row_sucesso() -> None:
+    grid = FakeGridSelectable()
+    analyser = Analyser(FakeSessionFind({grid.Id: grid}))
+    assert analyser.select_row(grid.Id, 2) is True
+    assert grid.SelectedRows == "2"
+
+
+def test_select_row_objeto_inexistente() -> None:
+    analyser = Analyser(FakeSessionFind({}))
+    assert analyser.select_row("x", 2) is False
+
+
+def test_select_row_nao_confirma_linha_fora_do_intervalo() -> None:
+    grid = FakeGridSelectable(row_count=5)
+    analyser = Analyser(FakeSessionFind({grid.Id: grid}))
+    assert analyser.select_row(grid.Id, 99) is False

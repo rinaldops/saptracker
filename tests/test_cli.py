@@ -79,6 +79,20 @@ class _FakeTreeTarget:
         return _FakeSelectedNodes(self._selected)
 
 
+class _FakeGridTarget:
+    """``GuiGridView`` falso para ``select-row``."""
+
+    Type = "GuiGridView"
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+
+    def __init__(self) -> None:
+        self.CurrentCellRow = -1
+        self.SelectedRows = ""
+
+    def SetCurrentCell(self, row: int, _column: str) -> None:
+        self.CurrentCellRow = row
+
+
 def _patch_connection(monkeypatch: pytest.MonkeyPatch, session: Any) -> None:
     monkeypatch.setattr(cli, "SapConnection", lambda: _FakeConnection(session))
 
@@ -133,6 +147,22 @@ def test_select_node_objeto_inexistente_retorna_codigo_1(
 ) -> None:
     _patch_connection(monkeypatch, _FakeSessionComFind(_FakeTreeTarget()))
     assert cli.main(["select-node", "wnd[0]/nao-existe", "000013"]) == 1
+    assert json.loads(capsys.readouterr().out)["ok"] is False
+
+
+def test_select_row_reporta_sucesso(monkeypatch: pytest.MonkeyPatch, capsys: Capsys) -> None:
+    alvo = _FakeGridTarget()
+    _patch_connection(monkeypatch, _FakeSessionComFind(alvo))
+    assert cli.main(["select-row", alvo.Id, "2"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"id": alvo.Id, "row": 2, "ok": True}
+    assert alvo.SelectedRows == "2"
+
+
+def test_select_row_objeto_inexistente_retorna_codigo_1(
+    monkeypatch: pytest.MonkeyPatch, capsys: Capsys
+) -> None:
+    _patch_connection(monkeypatch, _FakeSessionComFind(_FakeGridTarget()))
+    assert cli.main(["select-row", "wnd[0]/nao-existe", "2"]) == 1
     assert json.loads(capsys.readouterr().out)["ok"] is False
 
 

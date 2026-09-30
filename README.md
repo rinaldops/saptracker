@@ -1,15 +1,20 @@
 # SAP GUI Scripting Tool
 
-## Referência do checkout — 2026-09-26
+## Referência do checkout — 2026-09-30
 
-`pyproject.toml` declara 1.3.0, Python >=3.10 e o entrypoint
-`sap-scripting-tool = src.main:main`. O analisador/gravador é desktop Windows;
-Fiori e WebGUI pertencem ao projeto FIORI-AUTO. Os testes usam fakes COM;
-`python -m pytest -m "not sap_live"` seleciona a validação local sem sessão SAP.
-O metadado Homepage/Issues do pyproject ainda contém URLs example; use o
-repositório do projeto indicado nesta página para suporte.
+`pyproject.toml` declara 1.3.0, Python >=3.10 e dois entrypoints:
+`sap-scripting-tool = src.main:main` (UI Qt) e
+`sap-scripting-tool-cli = src.cli:main` (headless, ver seção "CLI headless"
+abaixo). O analisador/gravador
+é desktop Windows; Fiori e WebGUI pertencem ao projeto FIORI-AUTO. Os testes
+usam fakes COM; `python -m pytest -m "not sap_live"` seleciona a validação
+local sem sessão SAP. O metadado Homepage/Issues do pyproject ainda contém
+URLs example; use o repositório do projeto indicado nesta página para suporte.
 
-Esta revisão documental não iniciou a interface nem gravou uma sessão SAP.
+Esta revisão (2026-09-30) validou a CLI headless contra um SAP GUI real
+(Project Builder/cProjects) — ver [CHANGELOG](CHANGELOG.md) para o histórico
+completo e a seção "Limitações conhecidas" abaixo para o que foi descoberto
+no processo.
 
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-1.3.0-2E75B6)](CHANGELOG.md)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-375623)](LICENSE)
@@ -35,6 +40,7 @@ resolve exatamente as lacunas que ele nunca cobriu:
 | Código híbrido SAP + Win32 | ❌ | ✅ Intercalado automaticamente |
 | Geração de código | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java |
 | Exportação da árvore | ✅ | ✅ JSON + CSV + área de transferência |
+| Acesso headless (IA/automação) | ❌ | ✅ CLI `sap-scripting-tool-cli` (sem abrir a UI) |
 | Código aberto | ❌ | ✅ Licença MIT |
 
 ## Pré-requisitos
@@ -127,6 +133,27 @@ introspecção do conteúdo interno e detecta mudanças para o Gravador:
 Como o SAP **não emite eventos COM para `GuiShell`** (*SAP Note 587202*), esses
 controles são gravados por *polling* de *snapshots* em vez de *event listeners*.
 
+## CLI headless (para IA/automação)
+
+Além da interface Qt, `pyproject.toml` registra o script de console
+`sap-scripting-tool-cli` — reaproveita 100% do `Analyser`/`SapConnection` já
+usados pela UI, sem abrir nenhuma janela. Pensado para agentes de IA lerem o
+estado da tela do SAP GUI como JSON estruturado em vez de captura de tela (ver
+a skill [`sap-gui-snapshot`](../_skills/sap-gui-snapshot/SKILL.md), no
+agregador `app-devs`).
+
+| Comando | Faz | Efeitos colaterais |
+| --- | --- | --- |
+| `snapshot [--out ARQ] [--full-grids]` | Exporta a árvore de objetos em JSON | Nenhum (a menos que `--full-grids` recupere um grid incompleto) |
+| `inspect ID` | Detalha um objeto (introspecção rica de `GuiShell`) | Nenhum |
+| `highlight ID [--off]` | Desenha/remove a moldura vermelha (`Visualize`) | Visual, na tela |
+| `select-node ID CHAVE` | Seleciona um nó de `GuiTree` (`SelectNode`) | Seleção/scroll, na tela |
+| `select-row ID LINHA` | Seleciona uma linha de `GuiGridView` (`SetCurrentCell`/`SelectedRows`) | Seleção/scroll, na tela |
+| `copy-table ID` | Copia a grade inteira de um `GuiGridView` via clipboard | Seleção na tela + clipboard (restaurado ao final) |
+
+Todos aceitam `--connection N --session N` (padrão `0`/`0`). Erros de conexão
+saem com código `2` e mensagem no stderr.
+
 ## Geração de código
 
 O Gravador converte as ações capturadas em scripts idiomáticos. Linguagens
@@ -161,6 +188,30 @@ $session.FindById("wnd[0]/usr/cntlTREE1/shellcont/shell").SelectNode('000042')
 Quando um **diálogo Win32 nativo** (ex.: *Salvar como*, `CLASS:#32770`) aparece
 durante a gravação, um bloco AutoItX é **intercalado automaticamente** no script,
 com o título e a classe da janela e *placeholders* para os valores dos campos.
+
+## Limitações conhecidas
+
+- **Alguns `GuiGridView` não expõem `GetColumnOrder`/`GetColumnNames` via
+  Scripting** (ex.: o "worklist" do Project Builder/cProjects, hospedado num
+  container) — só a coluna com foco atual (`CurrentCellColumn`) fica
+  disponível por nome, mesmo que `ColumnCount` reporte muitas mais. É uma
+  limitação da API do SAP GUI Scripting nesse tipo de grid, não do código
+  desta ferramenta. Um nó `GuiGridColumnsAviso` sinaliza isso na árvore em vez
+  de mascarar a lacuna; `snapshot --full-grids`/`copy-table` recuperam os
+  dados completos via clipboard (`SelectAll` + menu de contexto → "Copiar"),
+  contornando a ausência de nomes técnicos.
+- **ALV Grids grandes carregam do servidor 1-2 "páginas" de linhas por vez.**
+  Ler/copiar sem antes rolar o grid inteiro (`FirstVisibleRow`) deixa linhas
+  além da primeira página vazias. `copy-table`/`snapshot --full-grids` já
+  fazem esse aquecimento automaticamente; chamadas diretas a `GetCellValue`
+  fora desses comandos não.
+- **GuiTree só reporta nós já expandidos/carregados**
+  (`GetAllNodeKeys()` é *lazy-load* — ver `tree.py`).
+- A recuperação de grids incompletos (`full_grid_data=True`) é deliberadamente
+  **desligada** no caminho de *polling* do Gravador (a cada ~250ms): rola a
+  tela e usa o clipboard, o que degradaria a gravação ao vivo. Só as ações
+  explícitas (`snapshot --full-grids`, "Analisar sessão" na UI, `copy-table`)
+  a usam.
 
 ## Contribuição
 

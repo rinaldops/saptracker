@@ -36,6 +36,12 @@ logger = get_logger(__name__)
 #: Papel onde guardamos o ID do objeto em cada item da árvore.
 _ID_ROLE = int(Qt.ItemDataRole.UserRole)
 _SEARCH_ROLE = _ID_ROLE + 1
+#: Tipo (``ObjectNode.type``) e chave (``ObjectNode.name``) do nó — usados
+#: para, ao destacar um ``GuiTreeNode``, também selecioná-lo na GuiTree real
+#: (``SelectNode``), já que o destaque (``Visualize``) marca o controle da
+#: árvore inteiro, não a linha específica.
+_TYPE_ROLE = _SEARCH_ROLE + 1
+_NAME_ROLE = _TYPE_ROLE + 1
 
 
 class ObjectTreeWidget(QTreeWidget):
@@ -272,6 +278,8 @@ class AnalyserTab(QWidget):
             _SEARCH_ROLE,
             " ".join((node.id, node.type, node.name, node.text)).casefold(),
         )
+        item.setData(0, _TYPE_ROLE, node.type)
+        item.setData(0, _NAME_ROLE, node.name)
         for child in node.children:
             item.addChild(self._make_item(child))
         return item
@@ -355,7 +363,13 @@ class AnalyserTab(QWidget):
     # Destaque (highlight) — apenas um objeto ativo por vez
     # ------------------------------------------------------------------ #
     def _highlight_item(self, item: QTreeWidgetItem) -> None:
-        """Destaca no SAP o item pressionado com o botão direito."""
+        """Destaca no SAP o item pressionado com o botão direito.
+
+        Quando o item é um nó sintético de ``GuiTree`` (o destaque marca o
+        controle inteiro, não a linha), também seleciona o nó de verdade na
+        árvore do SAP (``SelectNode``) — mesmo recurso oferecido à IA pela
+        CLI (``select-node``).
+        """
         if self._analyser is None:
             return
         obj_id = str(item.data(0, _ID_ROLE) or "")
@@ -364,8 +378,17 @@ class AnalyserTab(QWidget):
         if self._highlighted_id:
             self._analyser.highlight(self._highlighted_id, on=False)
             self._highlighted_id = ""
-        if self._analyser.highlight(obj_id, on=True):
+        destacado = self._analyser.highlight(obj_id, on=True)
+        if destacado:
             self._highlighted_id = obj_id
+
+        eh_no_de_tree = item.data(0, _TYPE_ROLE) == "GuiTreeNode"
+        key = str(item.data(0, _NAME_ROLE) or "") if eh_no_de_tree else ""
+        selecionado = bool(key) and self._analyser.select_node(obj_id, key)
+
+        if destacado and selecionado:
+            self._ctx.statusMessage.emit(f"Destaque em {obj_id} — nó '{key}' selecionado.")
+        elif destacado:
             self._ctx.statusMessage.emit(f"Destaque em {obj_id}.")
 
     def clear_highlight(self) -> None:

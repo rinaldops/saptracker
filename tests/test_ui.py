@@ -154,6 +154,7 @@ class _FakeAnalyser:
         self._root = root
         self._on_build = on_build
         self.highlights: list[tuple[str, bool]] = []
+        self.select_nodes: list[tuple[str, str]] = []
 
     def build_tree(self, progress_callback=None):  # type: ignore[no-untyped-def]
         if progress_callback is not None:
@@ -170,6 +171,10 @@ class _FakeAnalyser:
 
     def highlight(self, obj_id: str, *, on: bool = True) -> bool:
         self.highlights.append((obj_id, on))
+        return True
+
+    def select_node(self, obj_id: str, key: str) -> bool:
+        self.select_nodes.append((obj_id, key))
         return True
 
 
@@ -217,6 +222,33 @@ def test_highlight_e_removido_ao_soltar_botao_direito(janela, qtbot) -> None:  #
     assert aba._highlighted_id == ""
     assert not hasattr(aba, "btn_highlight")
     assert not hasattr(aba, "btn_clear_highlight")
+    # Nenhum dos dois é GuiTreeNode: select_node nunca é chamado.
+    assert fake.select_nodes == []
+
+
+def test_destaque_em_no_de_tree_tambem_seleciona_no_real(janela, qtbot) -> None:  # type: ignore[no-untyped-def]
+    """Destacar um GuiTreeNode sintético também chama SelectNode (via select_node)."""
+    from src.core.analyser import ObjectNode
+
+    arvore = ObjectNode(
+        id="r",
+        type="GuiSession",
+        children=[
+            ObjectNode(id="shell1", type="GuiTreeNode", name="000013", text="000013: Ferragem"),
+        ],
+    )
+    fake = _FakeAnalyser(arvore)
+    aba = _preparar_analyser_tab(janela, fake)
+    raiz = aba.tree.topLevelItem(0)
+    item_no = raiz.child(0)
+    aba.tree.expandAll()
+    aba.tree.doItemsLayout()
+
+    posicao = aba.tree.visualItemRect(item_no).center()
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao)
+
+    assert fake.highlights == [("shell1", True)]
+    assert fake.select_nodes == [("shell1", "000013")]
 
 
 def test_colunas_do_analisador_iniciam_em_dois_tercos(janela) -> None:  # type: ignore[no-untyped-def]

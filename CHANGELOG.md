@@ -14,6 +14,11 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `GuiTree` pela chave (`SelectNode` + confirmação via `GetSelectedNodes`) —
   o equivalente real da API a "destacar" um nó, já que `GuiTree` não expõe
   `Visualize` por nó.
+- **Destaque com botão direito na aba Analisador também seleciona o nó em
+  `GuiTree`.** O destaque (`Visualize`) marca o controle da árvore inteiro,
+  não a linha específica — ao destacar um `GuiTreeNode`, a UI agora também
+  chama `SelectNode` (mesmo recurso já exposto à IA via `select-node`),
+  destacando de verdade qual nó foi encontrado/clicado.
 
 ### Corrigido
 - **Busca do Analisador (UI) e `snapshot` não encontravam códigos de colunas

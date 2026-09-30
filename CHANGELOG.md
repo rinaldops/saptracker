@@ -20,6 +20,16 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   um `GuiTreeNode`, a UI agora também chama `SelectNode`; ao destacar um
   `GuiGridRow`, chama `SetCurrentCell`/`SelectedRows` (comando `select-row`
   da CLI) — destacando de verdade qual nó/linha foi encontrado/clicado.
+- **Comando `copy-table`: recupera a tabela inteira de um `GuiGridView` via
+  clipboard.** Contorna grids ALV sem `GetColumnOrder`/`GetColumnNames` (ver
+  abaixo) usando a mesma ação de "Selecionar tudo → Copiar" do menu de
+  contexto do próprio SAP GUI — sem precisar saber os nomes técnicos das
+  colunas. Validado contra um grid real: recuperou 100% das linhas/colunas
+  (25×10) onde antes só 1 coluna era capturada. O clipboard anterior do
+  usuário é restaurado ao final. Técnica confirmada por uma implementação VBA
+  anterior do usuário (`tests/modPrincipal.bas`, `ExtraiEquipamentos`), que já
+  usava o mesmo padrão de "selecionar coluna/tudo + menu de contexto + copiar"
+  para extrair dados de ALV Grids.
 
 ### Corrigido
 - **Grids ALV que não expõem `GetColumnOrder`/`GetColumnNames` via Scripting

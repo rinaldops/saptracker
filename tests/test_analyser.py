@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+from src.core import analyser as analyser_module
 from src.core.analyser import Analyser, ObjectNode
 from tests.conftest import FakeComponent
 
@@ -399,3 +402,75 @@ def test_select_row_nao_confirma_linha_fora_do_intervalo() -> None:
     grid = FakeGridSelectable(row_count=5)
     analyser = Analyser(FakeSessionFind({grid.Id: grid}))
     assert analyser.select_row(grid.Id, 99) is False
+
+
+# --------------------------------------------------------------------------- #
+# copy_grid_table
+# --------------------------------------------------------------------------- #
+class FakeGridCopiavel:
+    """``GuiGridView`` falso: ``SelectContextMenuItemByPosition`` é o que
+    efetivamente "copia" (deposita o texto simulado no clipboard falso).
+    """
+
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+
+    def __init__(self, texto_copiado: str, clipboard: dict[str, str | None]) -> None:
+        self.chamadas: list[str] = []
+        self._texto = texto_copiado
+        self._clipboard = clipboard
+
+    def SelectAll(self) -> None:
+        self.chamadas.append("SelectAll")
+
+    def ContextMenu(self) -> None:
+        self.chamadas.append("ContextMenu")
+
+    def SelectContextMenuItemByPosition(self, pos: str) -> None:
+        self.chamadas.append(f"SelectContextMenuItemByPosition({pos})")
+        self._clipboard["texto"] = self._texto
+
+
+def _patch_clipboard(
+    monkeypatch: pytest.MonkeyPatch, clipboard: dict[str, str | None]
+) -> None:
+    monkeypatch.setattr(analyser_module, "get_clipboard_text", lambda: clipboard["texto"])
+
+    def fake_set(texto: str | None) -> None:
+        clipboard["texto"] = texto
+
+    monkeypatch.setattr(analyser_module, "set_clipboard_text", fake_set)
+
+
+def test_copy_grid_table_sucesso(monkeypatch: pytest.MonkeyPatch) -> None:
+    clipboard: dict[str, str | None] = {"texto": "conteúdo anterior do usuário"}
+    _patch_clipboard(monkeypatch, clipboard)
+    texto_copiado = "4000028\t0030\t0080\tFerragem\r\n4000028\t0030\t0090\tConcretagem\r\n"
+    grid = FakeGridCopiavel(texto_copiado, clipboard)
+    analyser = Analyser(FakeSessionFind({grid.Id: grid}))
+
+    linhas = analyser.copy_grid_table(grid.Id)
+
+    assert linhas == [
+        ["4000028", "0030", "0080", "Ferragem"],
+        ["4000028", "0030", "0090", "Concretagem"],
+    ]
+    assert grid.chamadas == [
+        "SelectAll", "ContextMenu", "SelectContextMenuItemByPosition(0)",
+    ]
+    # Clipboard restaurado ao conteúdo anterior do usuário.
+    assert clipboard["texto"] == "conteúdo anterior do usuário"
+
+
+def test_copy_grid_table_objeto_inexistente(monkeypatch: pytest.MonkeyPatch) -> None:
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    analyser = Analyser(FakeSessionFind({}))
+    assert analyser.copy_grid_table("x") is None
+
+
+def test_copy_grid_table_retorna_none_se_nada_copiado(monkeypatch: pytest.MonkeyPatch) -> None:
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    grid = FakeGridCopiavel("", clipboard)  # SelectContextMenuItemByPosition não muda nada
+    analyser = Analyser(FakeSessionFind({grid.Id: grid}))
+    assert analyser.copy_grid_table(grid.Id) is None

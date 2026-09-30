@@ -84,6 +84,41 @@ def com_len(collection: Any) -> int:
         return 0
 
 
+def get_clipboard_text() -> str | None:
+    """Lê o texto atual da área de transferência do Windows.
+
+    Returns:
+        O texto, ou ``None`` se vazio/indisponível/fora do Windows.
+    """
+    try:
+        import win32clipboard
+
+        win32clipboard.OpenClipboard()
+        try:
+            return str(win32clipboard.GetClipboardData(win32clipboard.CF_UNICODETEXT))
+        finally:
+            win32clipboard.CloseClipboard()
+    except Exception as e:  # noqa: BLE001 - clipboard vazio, ocupado ou fora do Windows
+        logger.debug("Leitura do clipboard falhou: %s", e)
+        return None
+
+
+def set_clipboard_text(text: str | None) -> None:
+    """Grava (ou limpa, se ``None``) o texto da área de transferência do Windows."""
+    try:
+        import win32clipboard
+
+        win32clipboard.OpenClipboard()
+        try:
+            win32clipboard.EmptyClipboard()
+            if text:
+                win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, text)
+        finally:
+            win32clipboard.CloseClipboard()
+    except Exception as e:  # noqa: BLE001 - clipboard ocupado ou fora do Windows
+        logger.debug("Escrita no clipboard falhou: %s", e)
+
+
 def com_item(collection: Any, index: int, default: Any = None) -> Any:
     """Retorna o elemento ``index`` de uma coleção COM, tolerante à API.
 

@@ -12,7 +12,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.core.com_utils import com_item, com_len, safe_com_call, safe_get
+from src.core.com_utils import (
+    com_item,
+    com_len,
+    get_clipboard_text,
+    safe_com_call,
+    safe_get,
+    set_clipboard_text,
+)
 from src.core.shell_handlers import (
     get_handler,
     get_handler_for_type,
@@ -469,3 +476,40 @@ class Analyser:
         safe_com_call(lambda: setattr(obj, "SelectedRows", str(row)))
         atual = safe_get(obj, "CurrentCellRow", -1)
         return bool(atual == row)
+
+    # ------------------------------------------------------------------ #
+    # Cópia de tabela via clipboard (fallback para colunas não enumeráveis)
+    # ------------------------------------------------------------------ #
+    def copy_grid_table(self, obj_id: str) -> list[list[str]] | None:
+        """Copia a grade inteira de uma ``GuiGridView`` via clipboard.
+
+        Fallback para quando ``GetColumnOrder``/``GetColumnNames`` não estão
+        disponíveis (ver ``GuiGridColumnsAviso`` em :meth:`_grid_nodes`) — em
+        vez de ler célula a célula por nome de coluna (que exigiria já saber
+        os nomes técnicos), usa a mesma ação que o menu de contexto do SAP
+        oferece ao usuário: selecionar tudo e copiar. Recupera 100% das
+        linhas/colunas mesmo quando a introspecção por nome não funciona.
+
+        Efeitos colaterais (por operar via UI, não introspecção): seleciona
+        todas as linhas do grid na tela (visível ao usuário) e usa a área de
+        transferência do Windows — o conteúdo anterior é restaurado ao final.
+
+        Returns:
+            Lista de linhas (cada uma como lista de valores, na ordem exibida
+            na tela — sem nomes de coluna), ou ``None`` se o objeto não
+            existir ou nada tiver sido copiado.
+        """
+        obj = self.find_by_id(obj_id)
+        if obj is None:
+            return None
+        anterior = get_clipboard_text()
+        try:
+            safe_com_call(lambda: obj.SelectAll())
+            safe_com_call(lambda: obj.ContextMenu())
+            safe_com_call(lambda: obj.SelectContextMenuItemByPosition("0"))
+            texto = get_clipboard_text()
+        finally:
+            set_clipboard_text(anterior)
+        if not texto:
+            return None
+        return [linha.split("\t") for linha in texto.splitlines() if linha.strip()]

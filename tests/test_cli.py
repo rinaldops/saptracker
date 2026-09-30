@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from src import cli
+from src.core import analyser as analyser_module
 from src.core.sap_connection import SapConnectionError
 from tests.conftest import FakeSession
 
@@ -93,6 +94,33 @@ class _FakeGridTarget:
         self.CurrentCellRow = row
 
 
+class _FakeGridCopiavel:
+    """``GuiGridView`` falso para ``copy-table``."""
+
+    Type = "GuiGridView"
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+
+    def __init__(self, texto_copiado: str, clipboard: dict[str, str | None]) -> None:
+        self._texto = texto_copiado
+        self._clipboard = clipboard
+
+    def SelectAll(self) -> None:
+        pass
+
+    def ContextMenu(self) -> None:
+        pass
+
+    def SelectContextMenuItemByPosition(self, _pos: str) -> None:
+        self._clipboard["texto"] = self._texto
+
+
+def _patch_clipboard(monkeypatch: pytest.MonkeyPatch, clipboard: dict[str, str | None]) -> None:
+    monkeypatch.setattr(analyser_module, "get_clipboard_text", lambda: clipboard["texto"])
+    monkeypatch.setattr(
+        analyser_module, "set_clipboard_text", lambda t: clipboard.__setitem__("texto", t)
+    )
+
+
 def _patch_connection(monkeypatch: pytest.MonkeyPatch, session: Any) -> None:
     monkeypatch.setattr(cli, "SapConnection", lambda: _FakeConnection(session))
 
@@ -163,6 +191,26 @@ def test_select_row_objeto_inexistente_retorna_codigo_1(
 ) -> None:
     _patch_connection(monkeypatch, _FakeSessionComFind(_FakeGridTarget()))
     assert cli.main(["select-row", "wnd[0]/nao-existe", "2"]) == 1
+    assert json.loads(capsys.readouterr().out)["ok"] is False
+
+
+def test_copy_table_reporta_sucesso(monkeypatch: pytest.MonkeyPatch, capsys: Capsys) -> None:
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    alvo = _FakeGridCopiavel("4000028\t0030\t0080\tFerragem\r\n", clipboard)
+    _patch_connection(monkeypatch, _FakeSessionComFind(alvo))
+    assert cli.main(["copy-table", alvo.Id]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data == {"id": alvo.Id, "rows": [["4000028", "0030", "0080", "Ferragem"]], "ok": True}
+
+
+def test_copy_table_objeto_inexistente_retorna_codigo_1(
+    monkeypatch: pytest.MonkeyPatch, capsys: Capsys
+) -> None:
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    _patch_connection(monkeypatch, _FakeSessionComFind(_FakeGridCopiavel("", clipboard)))
+    assert cli.main(["copy-table", "wnd[0]/nao-existe"]) == 1
     assert json.loads(capsys.readouterr().out)["ok"] is False
 
 

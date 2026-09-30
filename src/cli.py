@@ -1,10 +1,11 @@
 """Interface de linha de comando (headless) da SAP GUI Scripting Tool.
 
 Permite obter a árvore de objetos de uma sessão SAP, inspecionar um objeto por
-ID, destacá-lo (``Visualize``), selecionar um nó de ``GuiTree`` pela chave e
-selecionar uma linha de ``GuiGridView`` pelo índice — sem abrir a interface
-Qt. Pensada para ser chamada por agentes de IA/automação em vez de captura de
-tela — ver a skill ``app-devs/_skills/sap-gui-snapshot``.
+ID, destacá-lo (``Visualize``), selecionar um nó de ``GuiTree``/linha de
+``GuiGridView`` e copiar a grade inteira via clipboard (fallback para grids
+sem enumeração de colunas) — sem abrir a interface Qt. Pensada para ser
+chamada por agentes de IA/automação em vez de captura de tela — ver a skill
+``app-devs/_skills/sap-gui-snapshot``.
 
 Registrada em ``pyproject.toml`` como o script de console
 ``sap-scripting-tool-cli``.
@@ -79,6 +80,14 @@ def cmd_select_row(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_copy_table(args: argparse.Namespace) -> int:
+    """Copia a grade inteira via clipboard (SelectAll + menu de contexto)."""
+    linhas = Analyser(_get_session(args)).copy_grid_table(args.id)
+    ok = linhas is not None
+    print(to_json({"id": args.id, "rows": linhas or [], "ok": ok}))
+    return 0 if ok else 1
+
+
 def _add_session_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--connection", type=int, default=0, help="Índice da conexão SAP (padrão: 0)."
@@ -130,6 +139,14 @@ def build_parser() -> argparse.ArgumentParser:
         "row", type=int, help="Índice da linha (campo 'name' no snapshot, base 0)."
     )
     p_select_row.set_defaults(func=cmd_select_row)
+
+    p_copy_table = sub.add_parser(
+        "copy-table",
+        help="Copia a grade inteira de uma GuiGridView via clipboard (todas as colunas).",
+    )
+    _add_session_args(p_copy_table)
+    p_copy_table.add_argument("id", help="ID completo do controle GuiGridView.")
+    p_copy_table.set_defaults(func=cmd_copy_table)
 
     return parser
 

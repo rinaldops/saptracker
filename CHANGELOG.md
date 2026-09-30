@@ -6,6 +6,22 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **CLI headless (`sap-scripting-tool-cli`).** Comandos `snapshot`, `inspect` e
+  `highlight` expõem o `Analyser` sem abrir a interface Qt, para uso por
+  agentes de IA/automação (ver skill `app-devs/_skills/sap-gui-snapshot`).
+
+### Corrigido
+- **Encoding do stdout da CLI.** `snapshot`/`inspect`/`highlight` forçam
+  UTF-8 em stdout/stderr; sem isso, o codepage do console Windows corrompia
+  texto acentuado ao capturar/redirecionar a saída.
+- **`PollingRecorder.stop()` não avisava quando a thread não encerrava a
+  tempo.** `test_start_stop_thread` iniciava uma thread real que, com um SAP
+  GUI de verdade aberto na máquina, podia ultrapassar o timeout do `join()` e
+  ficar órfã, causando `CO_E_NOTINITIALIZED` no encerramento do processo. O
+  teste agora isola `_acquire_thread_session`; `stop()` registra um aviso se
+  a thread não encerrar dentro do timeout.
+
 ## [1.3.0] - 2026-06-20
 
 ### Adicionado

@@ -25,6 +25,7 @@ build = ["pyinstaller>=6"]
 
 [project.scripts]
 sap-scripting-tool = "src.main:main"
+sap-scripting-tool-cli = "src.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/example/sap-scripting-tool"

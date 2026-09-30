@@ -7,9 +7,13 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 ## [Não lançado]
 
 ### Adicionado
-- **CLI headless (`sap-scripting-tool-cli`).** Comandos `snapshot`, `inspect` e
-  `highlight` expõem o `Analyser` sem abrir a interface Qt, para uso por
-  agentes de IA/automação (ver skill `app-devs/_skills/sap-gui-snapshot`).
+- **CLI headless (`sap-scripting-tool-cli`).** Comandos `snapshot`, `inspect`,
+  `highlight` e `select-node` expõem o `Analyser` sem abrir a interface Qt,
+  para uso por agentes de IA/automação (ver skill
+  `app-devs/_skills/sap-gui-snapshot`). `select-node` seleciona um nó de
+  `GuiTree` pela chave (`SelectNode` + confirmação via `GetSelectedNodes`) —
+  o equivalente real da API a "destacar" um nó, já que `GuiTree` não expõe
+  `Visualize` por nó.
 
 ### Corrigido
 - **Encoding do stdout da CLI.** `snapshot`/`inspect`/`highlight` forçam

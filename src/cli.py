@@ -1,9 +1,9 @@
 """Interface de linha de comando (headless) da SAP GUI Scripting Tool.
 
 Permite obter a árvore de objetos de uma sessão SAP, inspecionar um objeto por
-ID e destacá-lo (``Visualize``) sem abrir a interface Qt. Pensada para ser
-chamada por agentes de IA/automação em vez de captura de tela — ver a skill
-``app-devs/_skills/sap-gui-snapshot``.
+ID, destacá-lo (``Visualize``) e selecionar um nó de ``GuiTree`` pela chave —
+sem abrir a interface Qt. Pensada para ser chamada por agentes de IA/automação
+em vez de captura de tela — ver a skill ``app-devs/_skills/sap-gui-snapshot``.
 
 Registrada em ``pyproject.toml`` como o script de console
 ``sap-scripting-tool-cli``.
@@ -64,6 +64,13 @@ def cmd_highlight(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_select_node(args: argparse.Namespace) -> int:
+    """Seleciona (e rola até) um nó de uma GuiTree pela chave."""
+    ok = Analyser(_get_session(args)).select_node(args.id, args.key)
+    print(to_json({"id": args.id, "key": args.key, "ok": ok}))
+    return 0 if ok else 1
+
+
 def _add_session_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--connection", type=int, default=0, help="Índice da conexão SAP (padrão: 0)."
@@ -97,6 +104,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--off", action="store_true", help="Remove o destaque em vez de aplicá-lo."
     )
     p_highlight.set_defaults(func=cmd_highlight)
+
+    p_select_node = sub.add_parser(
+        "select-node", help="Seleciona um nó de uma GuiTree pela chave."
+    )
+    _add_session_args(p_select_node)
+    p_select_node.add_argument("id", help="ID completo do controle GuiTree.")
+    p_select_node.add_argument("key", help="Chave do nó (campo 'name'/'chave' no snapshot).")
+    p_select_node.set_defaults(func=cmd_select_node)
 
     return parser
 

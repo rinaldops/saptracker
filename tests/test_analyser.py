@@ -243,3 +243,57 @@ def test_highlight_sucesso() -> None:
 def test_highlight_objeto_inexistente() -> None:
     analyser = Analyser(FakeSessionFind({}))
     assert analyser.highlight("x") is False
+
+
+# --------------------------------------------------------------------------- #
+# select_node
+# --------------------------------------------------------------------------- #
+class FakeSelectedNodes:
+    """``GetSelectedNodes()`` falso: coleção COM com uma única chave."""
+
+    def __init__(self, keys: list[str]) -> None:
+        self._keys = keys
+        self.Count = len(keys)
+
+    def ElementAt(self, i: int) -> str:
+        return self._keys[i]
+
+
+class FakeTreeObj:
+    """``GuiTree`` falso: ``SelectNode`` muda o que ``GetSelectedNodes`` devolve.
+
+    Chaves fora de ``valid_keys`` são ignoradas (simula o SAP recusando uma
+    chave inexistente sem levantar erro).
+    """
+
+    Id = "wnd[0]/usr/cntlTREE1/shellcont/shell"
+
+    def __init__(self, valid_keys: frozenset[str] = frozenset({"000013"})) -> None:
+        self._valid_keys = valid_keys
+        self._selected: list[str] = []
+
+    def SelectNode(self, key: str) -> None:
+        if key in self._valid_keys:
+            self._selected = [key]
+
+    def GetSelectedNodes(self) -> FakeSelectedNodes:
+        return FakeSelectedNodes(self._selected)
+
+
+def test_select_node_sucesso() -> None:
+    tree = FakeTreeObj()
+    analyser = Analyser(FakeSessionFind({tree.Id: tree}))
+    assert analyser.select_node(tree.Id, "000013") is True
+
+
+def test_select_node_objeto_inexistente() -> None:
+    analyser = Analyser(FakeSessionFind({}))
+    assert analyser.select_node("x", "000013") is False
+
+
+def test_select_node_nao_confirma_chave_inexistente() -> None:
+    # Chave pedida não está entre as válidas do tree falso: SelectNode não
+    # tem efeito e a confirmação via GetSelectedNodes falha.
+    tree = FakeTreeObj(valid_keys=frozenset({"000099"}))
+    analyser = Analyser(FakeSessionFind({tree.Id: tree}))
+    assert analyser.select_node(tree.Id, "000013") is False

@@ -390,3 +390,27 @@ class Analyser:
             return False
         result = safe_com_call(lambda: obj.Visualize(on))
         return result is not None
+
+    # ------------------------------------------------------------------ #
+    # Seleção de nó (GuiTree)
+    # ------------------------------------------------------------------ #
+    def select_node(self, obj_id: str, key: str) -> bool:
+        """Seleciona um nó de uma ``GuiTree`` pela chave (``SelectNode``).
+
+        ``GuiTree`` não expõe ``Visualize`` por nó (só o controle inteiro tem
+        posição própria) — ``SelectNode`` é o equivalente da API para apontar
+        para um nó específico: seleciona e rola até ele.
+
+        Returns:
+            ``True`` se, após o comando, o nó selecionado passou a ser ``key``
+            (``SelectNode`` não expõe erro próprio, então a confirmação é lida
+            de volta via ``GetSelectedNodes``).
+        """
+        obj = self.find_by_id(obj_id)
+        if obj is None:
+            return False
+        safe_com_call(lambda: obj.SelectNode(key))
+        selected = safe_com_call(lambda: obj.GetSelectedNodes())
+        if selected is None:
+            return False
+        return any(str(com_item(selected, i)) == key for i in range(com_len(selected)))

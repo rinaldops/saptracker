@@ -52,6 +52,33 @@ class _FakeTarget:
         return True
 
 
+class _FakeSelectedNodes:
+    """``GetSelectedNodes()`` falso: coleção COM com uma única chave."""
+
+    def __init__(self, keys: list[str]) -> None:
+        self._keys = keys
+        self.Count = len(keys)
+
+    def ElementAt(self, i: int) -> str:
+        return self._keys[i]
+
+
+class _FakeTreeTarget:
+    """``GuiTree`` falso para ``select-node``."""
+
+    Type = "GuiTree"
+    Id = "wnd[0]/usr/cntlTREE1/shellcont/shell"
+
+    def __init__(self) -> None:
+        self._selected: list[str] = []
+
+    def SelectNode(self, key: str) -> None:
+        self._selected = [key]
+
+    def GetSelectedNodes(self) -> _FakeSelectedNodes:
+        return _FakeSelectedNodes(self._selected)
+
+
 def _patch_connection(monkeypatch: pytest.MonkeyPatch, session: Any) -> None:
     monkeypatch.setattr(cli, "SapConnection", lambda: _FakeConnection(session))
 
@@ -92,6 +119,21 @@ def test_highlight_off_desliga_destaque(monkeypatch: pytest.MonkeyPatch, capsys:
     _patch_connection(monkeypatch, _FakeSessionComFind(alvo))
     assert cli.main(["highlight", alvo.Id, "--off"]) == 0
     assert json.loads(capsys.readouterr().out)["on"] is False
+
+
+def test_select_node_reporta_sucesso(monkeypatch: pytest.MonkeyPatch, capsys: Capsys) -> None:
+    alvo = _FakeTreeTarget()
+    _patch_connection(monkeypatch, _FakeSessionComFind(alvo))
+    assert cli.main(["select-node", alvo.Id, "000013"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"id": alvo.Id, "key": "000013", "ok": True}
+
+
+def test_select_node_objeto_inexistente_retorna_codigo_1(
+    monkeypatch: pytest.MonkeyPatch, capsys: Capsys
+) -> None:
+    _patch_connection(monkeypatch, _FakeSessionComFind(_FakeTreeTarget()))
+    assert cli.main(["select-node", "wnd[0]/nao-existe", "000013"]) == 1
+    assert json.loads(capsys.readouterr().out)["ok"] is False
 
 
 def test_ensure_utf8_stdio_forca_utf8_mesmo_com_console_cp1252(

@@ -16,6 +16,13 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `Visualize` por nó.
 
 ### Corrigido
+- **Busca do Analisador (UI) e `snapshot` não encontravam códigos de colunas
+  ocultas de `GuiTree`.** O rótulo de cada nó só incluía `texto`, descartando
+  `colunas` (ex.: `TECH_KEY`) — em árvores de projeto SAP PS, o código real do
+  objeto (rede/atividade/elemento de tarefa, ex.: `4000028 0030 0080`) fica
+  numa coluna oculta, não no texto visível, então não aparecia em nenhum campo
+  pesquisável nem na árvore nem no `snapshot` da CLI. `_tree_nodes` agora
+  inclui os valores de `colunas` no rótulo.
 - **Encoding do stdout da CLI.** `snapshot`/`inspect`/`highlight` forçam
   UTF-8 em stdout/stderr; sem isso, o codepage do console Windows corrompia
   texto acentuado ao capturar/redirecionar a saída.

@@ -189,6 +189,33 @@ def test_shell_content_nodes_tree_reconstroi_hierarquia() -> None:
     assert [c.name for c in raiz.children] == ["a", "b"]
 
 
+def test_shell_content_nodes_tree_inclui_colunas_ocultas_no_rotulo() -> None:
+    # Em árvores de projeto SAP PS, o código real (rede/atividade/elemento de
+    # tarefa) fica numa coluna oculta (ex.: TECH_KEY), não no texto visível —
+    # sem incluí-lo no rótulo, o código não aparece em nenhum campo
+    # pesquisável (nem na árvore da UI, nem no snapshot da CLI).
+    analyser = Analyser(object())
+    data = {
+        "nos": [
+            {
+                "chave": "000013",
+                "texto": "Ferragem",
+                "filhos": [],
+                "colunas": {"          1": "Ferragem", "TECH_KEY": "4000028 0030 0080"},
+            },
+        ]
+    }
+    roots = analyser._shell_content_nodes("GuiTree", data, "shellid")
+    assert roots[0].text == "000013: Ferragem | Ferragem | 4000028 0030 0080"
+
+
+def test_shell_content_nodes_tree_sem_texto_usa_so_colunas() -> None:
+    analyser = Analyser(object())
+    data = {"nos": [{"chave": "c1", "texto": "", "filhos": [], "colunas": {"X": "valor"}}]}
+    roots = analyser._shell_content_nodes("GuiTree", data, "shellid")
+    assert roots[0].text == "c1: valor"
+
+
 def test_object_node_defaults() -> None:
     node = ObjectNode(id="x", type="GuiLabel")
     assert node.children == []

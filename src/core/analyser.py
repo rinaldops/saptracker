@@ -318,13 +318,22 @@ class Analyser:
         return nodes
 
     def _tree_nodes(self, data: dict[str, Any], parent_id: str) -> list[ObjectNode]:
-        """Reconstrói a hierarquia de nós de um GuiTree a partir das chaves."""
+        """Reconstrói a hierarquia de nós de um GuiTree a partir das chaves.
+
+        O rótulo inclui os valores de ``colunas`` (ex.: ``TECH_KEY``), não só
+        ``texto`` — em árvores de projeto SAP PS, o código real do objeto
+        (rede/atividade/elemento de tarefa) costuma estar numa coluna oculta,
+        não no texto visível. Sem isso, esse código não aparece em nenhum
+        campo pesquisável (nem na árvore da UI, nem no ``snapshot`` da CLI).
+        """
         nos: list[dict[str, Any]] = data.get("nos", [])
         por_chave: dict[str, ObjectNode] = {}
         for no in nos:
             chave = str(no.get("chave", ""))
             texto = str(no.get("texto", ""))
-            rotulo = f"{chave}: {texto}" if texto else chave
+            colunas_vals = [str(v) for v in (no.get("colunas") or {}).values() if v]
+            partes = [p for p in (texto, " | ".join(colunas_vals)) if p]
+            rotulo = f"{chave}: {' | '.join(partes)}" if partes else chave
             por_chave[chave] = ObjectNode(id=parent_id, type="GuiTreeNode", name=chave, text=rotulo)
 
         filhos_de: set[str] = set()

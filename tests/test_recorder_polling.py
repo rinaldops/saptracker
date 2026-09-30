@@ -339,7 +339,12 @@ def test_collect_fields_inclui_guitab_ativo(monkeypatch: Any) -> None:
     assert campo_na_aba_ativa.Id in ids, "campo de GuiTab ativo deve ser coletado"
 
 
-def test_start_stop_thread() -> None:
+def test_start_stop_thread(monkeypatch: Any) -> None:
+    # Sem isso, a thread chamaria win32com.client.GetObject("SAPGUI") de
+    # verdade em _acquire_thread_session — inofensivo quando não há SAP GUI
+    # aberto, mas se houver, o teste passa a varrer uma sessão real e pode
+    # ultrapassar o timeout do stop(), deixando a thread órfã (ver stop()).
+    monkeypatch.setattr(PollingRecorder, "_acquire_thread_session", lambda self: None)
     rec = PollingRecorder(session=object(), sink=lambda _a: None, poll_interval=0.01)
     assert rec.is_running is False
     rec.start()

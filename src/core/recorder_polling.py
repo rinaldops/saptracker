@@ -465,7 +465,18 @@ class PollingRecorder:
         """Sinaliza parada e aguarda a thread encerrar."""
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=self._poll_interval * 4 + 1.0)
+            thread = self._thread
+            thread.join(timeout=self._poll_interval * 4 + 1.0)
+            if thread.is_alive():
+                # Não força encerramento (não é possível matar uma thread Python
+                # de fora) — mas registra, em vez de descartar em silêncio uma
+                # referência cuja thread ainda pode estar em meio a uma chamada
+                # COM quando o processo terminar (ver PollingRecorder._run).
+                logger.warning(
+                    "PollingRecorder.stop: thread não encerrou dentro do timeout "
+                    "(%.2fs); pode seguir rodando em segundo plano.",
+                    self._poll_interval * 4 + 1.0,
+                )
             self._thread = None
         # Drena mudanças pendentes que ainda não se confirmaram mas representam
         # o estado final (campo ficou com novo valor quando gravação foi parada).

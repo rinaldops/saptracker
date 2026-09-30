@@ -59,6 +59,7 @@ class FakeGrid:
         current: tuple[int, str] = (-1, ""),
         selected: str = "",
         first: int = 0,
+        column_count: int | None = None,
     ) -> None:
         self._order = columns if order is None else order
         self._names = columns
@@ -67,6 +68,8 @@ class FakeGrid:
         self.CurrentCellRow, self.CurrentCellColumn = current
         self.SelectedRows = selected
         self.FirstVisibleRow = first
+        if column_count is not None:
+            self.ColumnCount = column_count
 
     def GetColumnOrder(self) -> FakeCol:
         return FakeCol(self._order)
@@ -218,6 +221,31 @@ def test_grid_usa_coluna_atual_quando_colecoes_indisponiveis() -> None:
     resultado = GuiGridViewHandler().inspecionar(grid)
     assert resultado["colunas"] == ["PSPID"]
     assert resultado["linhas"] == [{"PSPID": "P-1"}]
+
+
+def test_grid_sinaliza_colunas_incompletas_quando_api_de_colunas_indisponivel() -> None:
+    # Reproduz um grid ALV real (ex.: worklist do Project Builder) cuja API de
+    # Scripting não implementa GetColumnOrder/GetColumnNames: cai no fallback
+    # de 1 coluna (a atual), mas ColumnCount revela que há mais — sem
+    # sinalizar isso, os outros campos somem do snapshot/busca em silêncio.
+    grid = FakeGrid(
+        columns=["AUFNR"], rows=[{"AUFNR": "4000001"}],
+        current=(-1, "AUFNR"), column_count=10,
+    )
+    grid.GetColumnOrder = lambda: None  # type: ignore[method-assign]
+    grid.GetColumnNames = lambda: None  # type: ignore[method-assign]
+    resultado = GuiGridViewHandler().inspecionar(grid)
+    assert resultado["colunas"] == ["AUFNR"]
+    assert resultado["total_colunas"] == 10
+    assert resultado["colunas_completas"] is False
+
+
+def test_grid_colunas_completas_quando_todas_capturadas() -> None:
+    grid = FakeGrid(
+        columns=["MATNR", "MENGE"], rows=[], column_count=2,
+    )
+    resultado = GuiGridViewHandler().inspecionar(grid)
+    assert resultado["colunas_completas"] is True
 
 
 def test_grid_respeita_max_rows() -> None:

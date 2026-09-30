@@ -22,6 +22,15 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   da CLI) — destacando de verdade qual nó/linha foi encontrado/clicado.
 
 ### Corrigido
+- **Grids ALV que não expõem `GetColumnOrder`/`GetColumnNames` via Scripting
+  perdiam quase todos os dados em silêncio.** Alguns `GuiGridView` (ex.:
+  worklist do Project Builder, hospedado num container) não implementam esses
+  métodos — o handler caía no fallback de 1 coluna (`CurrentCellColumn`) sem
+  sinalizar que `ColumnCount` reportava muito mais, dando a falsa impressão de
+  um grid completo com 1 coluna e fazendo a busca "não encontrar" o resto da
+  tabela. `inspecionar` agora expõe `total_colunas`/`colunas_completas`, e a
+  árvore ganha um nó `GuiGridColumnsAviso` visível/pesquisável quando a
+  captura está incompleta.
 - **Busca do Analisador (UI) e `snapshot` não encontravam códigos de colunas
   ocultas de `GuiTree`.** O rótulo de cada nó só incluía `texto`, descartando
   `colunas` (ex.: `TECH_KEY`) — em árvores de projeto SAP PS, o código real do

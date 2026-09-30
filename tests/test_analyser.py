@@ -165,6 +165,39 @@ def test_arvore_lista_conteudo_do_grid() -> None:
     assert colunas.children[0].id == grid.Id
 
 
+def test_grid_nodes_sinaliza_colunas_incompletas() -> None:
+    # Grid cuja API de Scripting não expõe todas as colunas (ver
+    # GuiGridViewHandler.inspecionar): sem o aviso, os dados ausentes ficam
+    # invisíveis na árvore/busca, como se o grid só tivesse 1 coluna.
+    analyser = Analyser(object())
+    data = {
+        "colunas": ["AUFNR"],
+        "total_colunas": 10,
+        "colunas_completas": False,
+        "linhas": [{"AUFNR": "4000001"}],
+        "total": 1,
+    }
+    nodes = analyser._grid_nodes(data, "shellid")
+    colunas_node = next(n for n in nodes if n.type == "GuiGridColumns")
+    avisos = [c for c in colunas_node.children if c.type == "GuiGridColumnsAviso"]
+    assert len(avisos) == 1
+    assert "1 de 10" in avisos[0].text
+
+
+def test_grid_nodes_sem_aviso_quando_colunas_completas() -> None:
+    analyser = Analyser(object())
+    data = {
+        "colunas": ["MATNR", "MENGE"],
+        "total_colunas": 2,
+        "colunas_completas": True,
+        "linhas": [],
+        "total": 0,
+    }
+    nodes = analyser._grid_nodes(data, "shellid")
+    colunas_node = next(n for n in nodes if n.type == "GuiGridColumns")
+    assert all(c.type != "GuiGridColumnsAviso" for c in colunas_node.children)
+
+
 def test_arvore_resolve_grid_reportado_como_guishell() -> None:
     # Controle que reporta Type genérico "GuiShell" e tipo real em SubType.
     grid = FakeGridObj(type_="GuiShell", subtype="GuiGridView")

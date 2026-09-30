@@ -50,11 +50,21 @@ class GuiGridViewHandler(GuiShellHandler):
     def inspecionar(self, obj: Any) -> dict[str, Any]:
         """Retorna colunas e valores das células visíveis do grid.
 
+        Alguns grids ALV (ex.: hospedados via container/Web Dynpro) não
+        implementam ``GetColumnOrder``/``GetColumnNames`` via Scripting —
+        nesse caso ``colunas`` cai para só a coluna com foco atual
+        (``CurrentCellColumn``), embora ``ColumnCount`` possa reportar mais.
+        ``colunas_completas`` sinaliza esse déficit em vez de escondê-lo: sem
+        isso, a maior parte dos dados da tabela nunca é capturada e a busca
+        (UI/CLI) não encontra nada nas colunas ausentes.
+
         Returns:
-            Dicionário com ``"tipo"``, ``"colunas"``, ``"linhas"``,
-            ``"total"``, ``"celula_atual"`` e ``"linhas_selecionadas"``.
+            Dicionário com ``"tipo"``, ``"colunas"``, ``"total_colunas"``,
+            ``"colunas_completas"``, ``"linhas"``, ``"total"``,
+            ``"celula_atual"`` e ``"linhas_selecionadas"``.
         """
         colunas = self._column_names(obj)
+        total_colunas = int(safe_get(obj, "ColumnCount", len(colunas)) or len(colunas))
         row_count = int(safe_get(obj, "RowCount", 0) or 0)
         visible = min(row_count, self.max_rows)
 
@@ -69,6 +79,8 @@ class GuiGridViewHandler(GuiShellHandler):
         return {
             "tipo": "GuiGridView",
             "colunas": colunas,
+            "total_colunas": total_colunas,
+            "colunas_completas": len(colunas) >= total_colunas,
             "linhas": linhas,
             "total": row_count,
             "exibidas": visible,

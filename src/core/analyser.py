@@ -286,9 +286,18 @@ class Analyser:
         return []
 
     def _grid_nodes(self, data: dict[str, Any], parent_id: str) -> list[ObjectNode]:
-        """Nós de colunas e linhas (amostra) de um GuiGridView."""
+        """Nós de colunas e linhas (amostra) de um GuiGridView.
+
+        Quando ``colunas_completas`` é ``False`` (grid cuja API de Scripting
+        não expõe todas as colunas — ver
+        :meth:`GuiGridViewHandler.inspecionar`), acrescenta um nó de aviso
+        visível/pesquisável em vez de deixar a lacuna invisível: sem isso, a
+        maior parte dos dados da tabela nunca aparece na árvore/snapshot nem
+        na busca, dando a falsa impressão de que o grid só tem 1 coluna.
+        """
         nodes: list[ObjectNode] = []
         colunas: list[str] = data.get("colunas", [])
+        total_colunas = int(data.get("total_colunas", len(colunas)))
         if colunas:
             grupo = ObjectNode(
                 id=parent_id, type="GuiGridColumns", text=f"Colunas ({len(colunas)})"
@@ -296,6 +305,18 @@ class Analyser:
             grupo.children = [
                 ObjectNode(id=parent_id, type="GuiGridColumn", text=str(c)) for c in colunas
             ]
+            if not data.get("colunas_completas", True):
+                grupo.children.append(
+                    ObjectNode(
+                        id=parent_id,
+                        type="GuiGridColumnsAviso",
+                        text=(
+                            f"⚠ Apenas {len(colunas)} de {total_colunas} colunas capturadas "
+                            "— este grid não expõe GetColumnOrder/GetColumnNames via "
+                            "Scripting; use inspect para tentar a coluna em foco."
+                        ),
+                    )
+                )
             nodes.append(grupo)
 
         linhas: list[dict[str, str]] = data.get("linhas", [])

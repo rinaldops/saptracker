@@ -8,6 +8,49 @@ from src.core.com_utils import com_item, com_len, safe_com_call, safe_get
 from src.core.shell_handlers.base import GuiShellHandler, Lang
 
 
+def ensure_grid_rows_loaded(obj: Any, upto: int | None = None) -> None:
+    """Força o SAP a carregar (buscar do servidor) as linhas do grid até ``upto``.
+
+    O SAP GUI só busca do servidor 1-2 "páginas" de linhas por vez; linhas
+    além disso ficam vazias/incompletas em ``GetCellValue`` ou na cópia via
+    clipboard até serem "visitadas". Rolar ``FirstVisibleRow`` por toda a
+    extensão necessária força o carregamento — o mesmo padrão usado por uma
+    automação VBA anterior (``Sub ExtraiEquipamentos``) para esse problema.
+
+    Roda sempre que ``VisibleRowCount != RowCount`` (há mais linhas do que
+    cabem na tela de uma vez): não há propriedade que diga se os dados já
+    foram carregados do servidor, então rolar é a única forma de garantir —
+    é barato quando já estão carregados (round-trip local) e necessário
+    quando não estão.
+
+    Args:
+        obj: Objeto COM ``GuiGridView``.
+        upto: Carrega até este índice de linha (exclusive); ``None`` carrega
+            o grid inteiro (``RowCount``).
+    """
+    row_count = int(safe_get(obj, "RowCount", 0) or 0)
+    limite = row_count if upto is None else min(upto, row_count)
+    if limite <= 0:
+        return
+    visible_count = int(safe_get(obj, "VisibleRowCount", 0) or 0)
+    if visible_count <= 0 or visible_count == row_count:
+        return  # tudo já cabe na tela: nada a rolar.
+
+    i = 0
+    for _ in range(row_count + 2):  # 1 ciclo por página, com folga
+        if i > limite - 1:
+            break
+        safe_com_call(lambda i=i: setattr(obj, "FirstVisibleRow", i))
+        first_visible = int(safe_get(obj, "FirstVisibleRow", i) or i)
+        vc = int(safe_get(obj, "VisibleRowCount", 0) or 0)
+        if vc <= 0:
+            break
+        proximo = vc + first_visible - 1
+        if proximo <= i:
+            break  # sem progresso: evita loop infinito
+        i = proximo
+
+
 class GuiGridViewHandler(GuiShellHandler):
     """Handler especializado para controles GuiGridView (ALV Grid).
 

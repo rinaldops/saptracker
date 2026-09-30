@@ -410,14 +410,37 @@ def test_select_row_nao_confirma_linha_fora_do_intervalo() -> None:
 class FakeGridCopiavel:
     """``GuiGridView`` falso: ``SelectContextMenuItemByPosition`` é o que
     efetivamente "copia" (deposita o texto simulado no clipboard falso).
+
+    ``row_count``/``visible_row_count`` > 0 simulam paginação real (ver
+    :func:`ensure_grid_rows_loaded`), registrando as chamadas de
+    ``FirstVisibleRow`` em ``chamadas`` junto com as demais.
     """
 
     Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
 
-    def __init__(self, texto_copiado: str, clipboard: dict[str, str | None]) -> None:
+    def __init__(
+        self,
+        texto_copiado: str,
+        clipboard: dict[str, str | None],
+        *,
+        row_count: int = 0,
+        visible_row_count: int = 0,
+    ) -> None:
         self.chamadas: list[str] = []
         self._texto = texto_copiado
         self._clipboard = clipboard
+        self.RowCount = row_count
+        self.VisibleRowCount = visible_row_count
+        self._first_visible_row = 0
+
+    @property
+    def FirstVisibleRow(self) -> int:
+        return self._first_visible_row
+
+    @FirstVisibleRow.setter
+    def FirstVisibleRow(self, valor: int) -> None:
+        self._first_visible_row = valor
+        self.chamadas.append(f"FirstVisibleRow({valor})")
 
     def SelectAll(self) -> None:
         self.chamadas.append("SelectAll")
@@ -459,6 +482,28 @@ def test_copy_grid_table_sucesso(monkeypatch: pytest.MonkeyPatch) -> None:
     ]
     # Clipboard restaurado ao conteúdo anterior do usuário.
     assert clipboard["texto"] == "conteúdo anterior do usuário"
+
+
+def test_copy_grid_table_carrega_todas_as_paginas_antes_de_copiar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Grid com mais linhas do que cabem na tela de uma vez (RowCount >
+    # VisibleRowCount): sem forçar o carregamento de todas as páginas antes
+    # de copiar, linhas além da primeira viriam vazias em grids grandes.
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    grid = FakeGridCopiavel("linha\r\n", clipboard, row_count=23, visible_row_count=5)
+    analyser = Analyser(FakeSessionFind({grid.Id: grid}))
+
+    analyser.copy_grid_table(grid.Id)
+
+    # FirstVisibleRow foi percorrido (aquecimento) ANTES de SelectAll/copiar.
+    indice_select_all = grid.chamadas.index("SelectAll")
+    assert indice_select_all > 0
+    assert all(c.startswith("FirstVisibleRow(") for c in grid.chamadas[:indice_select_all])
+    ultima_pagina = grid.chamadas[indice_select_all - 1]
+    ultimo_valor = int(ultima_pagina.removeprefix("FirstVisibleRow(").removesuffix(")"))
+    assert ultimo_valor + grid.VisibleRowCount - 1 >= grid.RowCount - 1
 
 
 def test_copy_grid_table_objeto_inexistente(monkeypatch: pytest.MonkeyPatch) -> None:

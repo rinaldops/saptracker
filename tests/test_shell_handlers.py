@@ -21,7 +21,7 @@ from src.core.shell_handlers import (
 )
 from src.core.shell_handlers.calendar import GuiCalendarHandler
 from src.core.shell_handlers.generic import GuiShellGenerico
-from src.core.shell_handlers.grid_view import GuiGridViewHandler
+from src.core.shell_handlers.grid_view import GuiGridViewHandler, ensure_grid_rows_loaded
 from src.core.shell_handlers.text_edit import GuiTextEditHandler
 from src.core.shell_handlers.toolbar import GuiToolbarHandler
 from src.core.shell_handlers.tree import GuiTreeHandler
@@ -281,6 +281,52 @@ def test_grid_tirar_snapshot_estrutura() -> None:
     assert snap["celula_atual_coluna"] == "A"
     assert snap["linhas_selecionadas"] == "4"
     assert snap["primeira_visivel"] == 2
+
+
+class FakePaginatedGrid:
+    """``GuiGridView`` falso que simula a paginação real do SAP GUI.
+
+    ``FirstVisibleRow`` é uma propriedade real (getter/setter): setá-la avança
+    a "página" e fica registrado em ``chamadas``, imitando o SAP GUI que só
+    busca do servidor 1-2 páginas de linhas por vez.
+    """
+
+    def __init__(self, row_count: int, visible_row_count: int) -> None:
+        self.RowCount = row_count
+        self.VisibleRowCount = visible_row_count
+        self._first_visible_row = 0
+        self.chamadas: list[int] = []
+
+    @property
+    def FirstVisibleRow(self) -> int:
+        return self._first_visible_row
+
+    @FirstVisibleRow.setter
+    def FirstVisibleRow(self, valor: int) -> None:
+        self._first_visible_row = valor
+        self.chamadas.append(valor)
+
+
+def test_ensure_grid_rows_loaded_percorre_todas_as_paginas() -> None:
+    grid = FakePaginatedGrid(row_count=23, visible_row_count=5)
+    ensure_grid_rows_loaded(grid)
+    assert grid.chamadas[0] == 0
+    ultima_pagina_final = grid.chamadas[-1] + grid.VisibleRowCount - 1
+    assert ultima_pagina_final >= grid.RowCount - 1
+    # Não deu voltas demais: ~RowCount/VisibleRowCount ciclos, não um por linha.
+    assert len(grid.chamadas) <= 6
+
+
+def test_ensure_grid_rows_loaded_pula_quando_tudo_ja_visivel() -> None:
+    grid = FakePaginatedGrid(row_count=5, visible_row_count=5)
+    ensure_grid_rows_loaded(grid)
+    assert grid.chamadas == []
+
+
+def test_ensure_grid_rows_loaded_respeita_upto() -> None:
+    grid = FakePaginatedGrid(row_count=100, visible_row_count=5)
+    ensure_grid_rows_loaded(grid, upto=12)
+    assert max(grid.chamadas) < 12 + grid.VisibleRowCount  # não precisou ir até o fim
 
 
 # --------------------------------------------------------------------------- #

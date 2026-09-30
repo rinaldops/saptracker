@@ -30,6 +30,16 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   anterior do usuário (`tests/modPrincipal.bas`, `ExtraiEquipamentos`), que já
   usava o mesmo padrão de "selecionar coluna/tudo + menu de contexto + copiar"
   para extrair dados de ALV Grids.
+- **`copy-table` carrega todas as páginas do grid antes de copiar
+  (`ensure_grid_rows_loaded`).** O SAP GUI só busca do servidor 1-2 páginas de
+  linhas por vez — em grids grandes, copiar sem antes rolar por
+  `FirstVisibleRow` até o fim deixaria as linhas além da primeira página
+  vazias/incompletas. Mesmo padrão de aquecimento usado pela implementação VBA
+  de referência do usuário. Escopado só em `copy_grid_table` (ação explícita,
+  opt-in) — não no `GuiGridViewHandler.inspecionar()` compartilhado, que
+  também é chamado a cada ciclo (~250ms) do *Gravador* durante gravação ao
+  vivo; forçar paginação nesse caminho rolaria a tela sob o usuário e
+  degradaria a gravação em tempo real.
 
 ### Corrigido
 - **Grids ALV que não expõem `GetColumnOrder`/`GetColumnNames` via Scripting

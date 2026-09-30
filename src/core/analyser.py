@@ -26,6 +26,7 @@ from src.core.shell_handlers import (
     is_supported_shell,
     normalize_shell_type,
 )
+from src.core.shell_handlers.grid_view import ensure_grid_rows_loaded
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -490,9 +491,16 @@ class Analyser:
         oferece ao usuário: selecionar tudo e copiar. Recupera 100% das
         linhas/colunas mesmo quando a introspecção por nome não funciona.
 
-        Efeitos colaterais (por operar via UI, não introspecção): seleciona
-        todas as linhas do grid na tela (visível ao usuário) e usa a área de
-        transferência do Windows — o conteúdo anterior é restaurado ao final.
+        O SAP GUI só busca do servidor 1-2 "páginas" de linhas por vez — sem
+        forçar o carregamento de todas antes de copiar, linhas além da(s)
+        primeira(s) página(s) viriam vazias (grids grandes, ex.: milhares de
+        linhas). Por isso rola o grid inteiro (:func:`ensure_grid_rows_loaded`)
+        antes de selecionar e copiar.
+
+        Efeitos colaterais (por operar via UI, não introspecção): rola e
+        seleciona todas as linhas do grid na tela (visível ao usuário) e usa a
+        área de transferência do Windows — o conteúdo anterior é restaurado ao
+        final.
 
         Returns:
             Lista de linhas (cada uma como lista de valores, na ordem exibida
@@ -502,6 +510,7 @@ class Analyser:
         obj = self.find_by_id(obj_id)
         if obj is None:
             return None
+        ensure_grid_rows_loaded(obj)
         anterior = get_clipboard_text()
         try:
             safe_com_call(lambda: obj.SelectAll())

@@ -157,7 +157,7 @@ class _FakeAnalyser:
         self.select_nodes: list[tuple[str, str]] = []
         self.select_rows: list[tuple[str, int]] = []
 
-    def build_tree(self, progress_callback=None):  # type: ignore[no-untyped-def]
+    def build_tree(self, progress_callback=None, *, full_grid_data=False):  # type: ignore[no-untyped-def]
         if progress_callback is not None:
             progress_callback(0, 3)
             progress_callback(1, 3)

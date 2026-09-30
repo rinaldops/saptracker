@@ -105,11 +105,27 @@ class Analyser:
     # ------------------------------------------------------------------ #
     # Percurso da árvore
     # ------------------------------------------------------------------ #
-    def build_tree(self, progress_callback: ProgressCallback | None = None) -> ObjectNode:
+    def build_tree(
+        self,
+        progress_callback: ProgressCallback | None = None,
+        *,
+        full_grid_data: bool = False,
+    ) -> ObjectNode:
         """Constrói a árvore de objetos a partir da sessão.
 
         Quando ``progress_callback`` é informado, faz uma contagem leve da
         hierarquia COM e reporta ``(processados, total)`` durante o percurso.
+
+        Args:
+            full_grid_data: Se ``True``, grids `GuiGridView`` com colunas
+                incompletas (ver :meth:`_grid_nodes`) tentam recuperar a
+                tabela inteira via clipboard (mesma técnica de
+                :meth:`copy_grid_table`) antes de montar os nós — corrige a
+                busca/árvore para esses grids, ao custo de efeitos colaterais
+                (seleção na tela, uso do clipboard) e mais tempo. Use apenas
+                em ações deliberadas de usuário (ex.: "Analisar sessão",
+                ``snapshot``) — **nunca** em polling de alta frequência (ex.:
+                o Recorder, a cada ~250ms), que usa o padrão ``False``.
 
         Returns:
             Nó raiz representando a própria sessão (com as janelas como filhos).
@@ -133,6 +149,7 @@ class Analyser:
             progress_callback=progress_callback,
             processed=processed,
             total=total,
+            full_grid_data=full_grid_data,
         )
         if progress_callback is not None:
             progress_callback(total, total)
@@ -165,6 +182,8 @@ class Analyser:
         progress_callback: ProgressCallback | None = None,
         processed: list[int] | None = None,
         total: int = 0,
+        *,
+        full_grid_data: bool = False,
     ) -> None:
         """Itera sobre uma ``GuiComponentCollection`` adicionando subnós."""
         if collection is None or depth >= MAX_DEPTH:
@@ -178,7 +197,7 @@ class Analyser:
             # Conteúdo interno de GuiShell (colunas, linhas, nós, botões) não
             # vem por ``Children`` COM — é introspectado pelo handler dedicado.
             if node.shell_supported:
-                self._append_shell_content(node, obj)
+                self._append_shell_content(node, obj, full_grid_data=full_grid_data)
             if progress_callback is not None and processed is not None:
                 processed[0] += 1
                 progress_callback(processed[0], total)
@@ -192,6 +211,7 @@ class Analyser:
                     progress_callback,
                     processed,
                     total,
+                    full_grid_data=full_grid_data,
                 )
 
     def _node_from_obj(self, obj: Any) -> ObjectNode:
@@ -238,7 +258,9 @@ class Analyser:
     # ------------------------------------------------------------------ #
     # Conteúdo interno de GuiShell como nós da árvore
     # ------------------------------------------------------------------ #
-    def _append_shell_content(self, node: ObjectNode, obj: Any) -> None:
+    def _append_shell_content(
+        self, node: ObjectNode, obj: Any, *, full_grid_data: bool = False
+    ) -> None:
         """Anexa o conteúdo interno do GuiShell como filhos de ``node``.
 
         A introspecção é *best-effort*: qualquer falha (objeto sumiu, método
@@ -247,6 +269,12 @@ class Analyser:
         handler = get_handler_for_type(node.type)
         try:
             data = handler.inspecionar(obj)
+            if (
+                full_grid_data
+                and node.type == "GuiGridView"
+                and not data.get("colunas_completas", True)
+            ):
+                data = self._recover_full_grid_data(obj, data)
             filhos = self._shell_content_nodes(node.type, data, node.id)
             node.children.extend(filhos)
             logger.debug(
@@ -510,6 +538,15 @@ class Analyser:
         obj = self.find_by_id(obj_id)
         if obj is None:
             return None
+        return self._copy_grid_rows(obj)
+
+    def _copy_grid_rows(self, obj: Any) -> list[list[str]] | None:
+        """Lógica de :meth:`copy_grid_table` operando direto no objeto COM.
+
+        Reaproveitada por :meth:`_recover_full_grid_data` para consertar a
+        árvore/busca de grids com colunas incompletas, sem duplicar a lógica
+        de aquecimento de páginas + clipboard.
+        """
         ensure_grid_rows_loaded(obj)
         anterior = get_clipboard_text()
         try:
@@ -522,3 +559,32 @@ class Analyser:
         if not texto:
             return None
         return [linha.split("\t") for linha in texto.splitlines() if linha.strip()]
+
+    def _recover_full_grid_data(self, obj: Any, data: dict[str, Any]) -> dict[str, Any]:
+        """Reempacota a cópia via clipboard como colunas/linhas genéricas.
+
+        Usado por :meth:`_append_shell_content` (com ``full_grid_data=True``)
+        quando ``colunas_completas`` é ``False`` — sem nomes técnicos reais,
+        as colunas viram ``col_0``, ``col_1``... apenas para ficarem
+        pesquisáveis na árvore; ``inspect``/``copy_grid_table`` continuam
+        sendo a forma de obter os valores brutos por posição.
+
+        Se a cópia falhar (nada no clipboard), devolve ``data`` inalterado —
+        mantém o aviso ``GuiGridColumnsAviso`` em vez de fingir sucesso.
+        """
+        linhas_raw = self._copy_grid_rows(obj)
+        if not linhas_raw:
+            return data
+        n_col = max(len(linha) for linha in linhas_raw)
+        colunas = [f"col_{i}" for i in range(n_col)]
+        linhas = [
+            {colunas[i]: (linha[i] if i < len(linha) else "") for i in range(n_col)}
+            for linha in linhas_raw
+        ]
+        return {
+            **data,
+            "colunas": colunas,
+            "linhas": linhas,
+            "total": len(linhas),
+            "colunas_completas": True,
+        }

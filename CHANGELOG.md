@@ -42,6 +42,21 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   degradaria a gravação em tempo real.
 
 ### Corrigido
+- **Busca do Analisador (UI) continuava sem encontrar dados de grids com
+  colunas incompletas, mesmo depois do `copy-table`.** `copy-table` era um
+  comando isolado — não alimentava a árvore/busca que a aba Analisador (e
+  `snapshot`) realmente usa, então o aviso `GuiGridColumnsAviso` aparecia mas
+  os dados continuavam ausentes da busca. `build_tree`/`_append_shell_content`
+  ganham o parâmetro `full_grid_data`: quando `True`, grids incompletos são
+  automaticamente recuperados via clipboard (mesma técnica do `copy-table`,
+  incluindo o aquecimento de páginas) e embutidos na árvore como colunas
+  genéricas (`col_0`, `col_1`...) — agora pesquisáveis. Ligado por padrão na
+  aba Analisador (`analyse()`) e disponível como `snapshot --full-grids` na
+  CLI; **não** ligado no caminho padrão (`full_grid_data=False`) usado pelo
+  `PollingRecorder` a cada ciclo, pelo mesmo motivo do aquecimento de páginas
+  acima. Validado contra o grid real do Project Builder: a linha do elemento
+  de tarefa 0080 passou a aparecer completa na árvore sem nenhum comando
+  adicional.
 - **Grids ALV que não expõem `GetColumnOrder`/`GetColumnNames` via Scripting
   perdiam quase todos os dados em silêncio.** Alguns `GuiGridView` (ex.:
   worklist do Project Builder, hospedado num container) não implementam esses

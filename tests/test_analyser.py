@@ -519,3 +519,83 @@ def test_copy_grid_table_retorna_none_se_nada_copiado(monkeypatch: pytest.Monkey
     grid = FakeGridCopiavel("", clipboard)  # SelectContextMenuItemByPosition não muda nada
     analyser = Analyser(FakeSessionFind({grid.Id: grid}))
     assert analyser.copy_grid_table(grid.Id) is None
+
+
+# --------------------------------------------------------------------------- #
+# build_tree(full_grid_data=True) — recupera colunas incompletas na árvore/busca
+# --------------------------------------------------------------------------- #
+class FakeGridIncompletoRecuperavel:
+    """``GuiGridView`` sem ``GetColumnOrder``/``GetColumnNames`` (colunas
+    incompletas — cai no fallback de 1 coluna), mas com
+    ``SelectAll``/``ContextMenu``/``SelectContextMenuItemByPosition``
+    (recuperável via clipboard, como o grid real do Project Builder).
+    """
+
+    Id = "wnd[0]/usr/cntlGRID1/shellcont/shell"
+    Type = "GuiGridView"
+
+    def __init__(self, texto_copiado: str, clipboard: dict[str, str | None]) -> None:
+        self.RowCount = 1
+        self.ColumnCount = 4
+        self.CurrentCellRow = -1
+        self.CurrentCellColumn = "AUFNR"
+        self.SelectedRows = ""
+        self.FirstVisibleRow = 0
+        self._texto = texto_copiado
+        self._clipboard = clipboard
+
+    def GetCellValue(self, r: int, col: str) -> str:
+        return "4000028" if col == "AUFNR" else ""
+
+    def SelectAll(self) -> None:
+        pass
+
+    def ContextMenu(self) -> None:
+        pass
+
+    def SelectContextMenuItemByPosition(self, pos: str) -> None:
+        self._clipboard["texto"] = self._texto
+
+
+def _avisos_de_colunas(grid_node: ObjectNode) -> list[ObjectNode]:
+    return [
+        c
+        for grupo in grid_node.children
+        if grupo.type == "GuiGridColumns"
+        for c in grupo.children
+        if c.type == "GuiGridColumnsAviso"
+    ]
+
+
+def test_build_tree_full_grid_data_recupera_colunas_incompletas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    grid = FakeGridIncompletoRecuperavel(
+        "4000028\t0030\t0080\tFerragem\r\n", clipboard
+    )
+    root = Analyser(_session_com_grid(grid)).build_tree(full_grid_data=True)
+
+    grid_node = root.children[0].children[0]
+    assert _avisos_de_colunas(grid_node) == []
+    linhas_node = next(c for c in grid_node.children if c.type == "GuiGridRows")
+    assert "Ferragem" in linhas_node.children[0].text
+    assert "0080" in linhas_node.children[0].text
+
+
+def test_build_tree_sem_full_grid_data_mantem_aviso_e_nao_toca_clipboard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Padrão (full_grid_data=False): usado pelo PollingRecorder a cada ~250ms
+    # durante gravação ao vivo — não pode rolar a tela nem tocar o clipboard.
+    clipboard: dict[str, str | None] = {"texto": None}
+    _patch_clipboard(monkeypatch, clipboard)
+    grid = FakeGridIncompletoRecuperavel(
+        "4000028\t0030\t0080\tFerragem\r\n", clipboard
+    )
+    root = Analyser(_session_com_grid(grid)).build_tree()
+
+    grid_node = root.children[0].children[0]
+    assert len(_avisos_de_colunas(grid_node)) == 1
+    assert clipboard["texto"] is None  # nada foi copiado

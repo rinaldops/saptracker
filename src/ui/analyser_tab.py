@@ -233,7 +233,9 @@ class AnalyserTab(QWidget):
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         QApplication.processEvents()  # pinta a mensagem/cursor antes de bloquear
         try:
-            self._root = self._analyser.build_tree(self._on_analysis_progress)
+            self._root = self._analyser.build_tree(
+                self._on_analysis_progress, full_grid_data=True
+            )
             self.tree.clear()
             root_item = self._make_item(self._root)
             self.tree.addTopLevelItem(root_item)

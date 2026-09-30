@@ -140,6 +140,27 @@ def test_snapshot_grava_arquivo_com_out(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert json.loads(saida.read_text(encoding="utf-8"))["type"] == "GuiSession"
 
 
+def test_snapshot_full_grids_repassa_flag_para_build_tree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.core.analyser import Analyser, ObjectNode
+
+    chamadas: list[bool] = []
+
+    def fake_build_tree(
+        self: Analyser, progress_callback: Any = None, *, full_grid_data: bool = False
+    ) -> ObjectNode:
+        chamadas.append(full_grid_data)
+        return ObjectNode(id="r", type="GuiSession")
+
+    monkeypatch.setattr(Analyser, "build_tree", fake_build_tree)
+    _patch_connection(monkeypatch, FakeSession())
+
+    assert cli.main(["snapshot", "--full-grids"]) == 0
+    assert cli.main(["snapshot"]) == 0
+    assert chamadas == [True, False]
+
+
 def test_inspect_imprime_detalhes(monkeypatch: pytest.MonkeyPatch, capsys: Capsys) -> None:
     alvo = _FakeTarget()
     _patch_connection(monkeypatch, _FakeSessionComFind(alvo))

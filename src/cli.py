@@ -41,7 +41,7 @@ def _get_session(args: argparse.Namespace) -> Any:
 
 def cmd_snapshot(args: argparse.Namespace) -> int:
     """Exporta a árvore de objetos da sessão (JSON no stdout ou em arquivo)."""
-    tree = Analyser(_get_session(args)).build_tree()
+    tree = Analyser(_get_session(args)).build_tree(full_grid_data=args.full_grids)
     data = tree.to_dict()
     if args.out:
         path = save_json(data, args.out)
@@ -107,6 +107,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_snapshot = sub.add_parser("snapshot", help="Exporta a árvore de objetos da sessão em JSON.")
     _add_session_args(p_snapshot)
     p_snapshot.add_argument("--out", help="Arquivo JSON de saída (padrão: imprime no stdout).")
+    p_snapshot.add_argument(
+        "--full-grids",
+        action="store_true",
+        help=(
+            "Recupera via clipboard grids GuiGridView com colunas incompletas "
+            "(ver GuiGridColumnsAviso) antes de montar a árvore — mais lento "
+            "e com efeitos colaterais (seleção na tela, uso do clipboard)."
+        ),
+    )
     p_snapshot.set_defaults(func=cmd_snapshot)
 
     p_inspect = sub.add_parser("inspect", help="Detalha um objeto por ID.")

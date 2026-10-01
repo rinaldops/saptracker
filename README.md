@@ -241,6 +241,21 @@ PRs são bem-vindos. O CI (GitHub Actions) precisa passar em `ruff` (lint),
 
 Mais detalhes de arquitetura em [docs/architecture.md](docs/architecture.md).
 
+## Exportação da YSREGRASPEP
+
+A transação `ysregraspep` não possui exportação da tabela para Excel. Com o SAP GUI aberto e a sessão posicionada na transação, execute:
+
+```bash
+python scripts/export_ysregraspep.py --out dados-ysregraspep.xlsx
+```
+
+O script reutiliza o capturador paginado de `GuiTableControl`, percorre todas as páginas (22 linhas por página no caso validado), e grava as linhas em uma planilha Excel com filtro e cabeçalho congelado. Para outra conexão/sessão:
+
+```bash
+python scripts/export_ysregraspep.py --connection 1 --session 0 --out dados.xlsx
+```
+
+O ID da tabela pode ser substituído com `--table-id`. A dependência de saída é `openpyxl` (`python -m pip install openpyxl`). O processo reposiciona a tabela no SAP durante a captura; execute-o somente quando essa alteração visual for aceitável.
 ## Licença
 
 Distribuído sob a licença [MIT](LICENSE).

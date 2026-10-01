@@ -156,6 +156,8 @@ class _FakeAnalyser:
         self.highlights: list[tuple[str, bool]] = []
         self.select_nodes: list[tuple[str, str]] = []
         self.select_rows: list[tuple[str, int]] = []
+        self.select_columns: list[tuple[str, int]] = []
+        self.inspections: list[str] = []
 
     def build_tree(self, progress_callback=None, *, full_grid_data=False):  # type: ignore[no-untyped-def]
         if progress_callback is not None:
@@ -168,6 +170,7 @@ class _FakeAnalyser:
         return self._root
 
     def inspect(self, obj_id: str) -> dict:
+        self.inspections.append(obj_id)
         return {"id": obj_id}
 
     def highlight(self, obj_id: str, *, on: bool = True) -> bool:
@@ -180,6 +183,10 @@ class _FakeAnalyser:
 
     def select_row(self, obj_id: str, row: int) -> bool:
         self.select_rows.append((obj_id, row))
+        return True
+
+    def select_table_column(self, obj_id: str, column: int) -> bool:
+        self.select_columns.append((obj_id, column))
         return True
 
 
@@ -280,6 +287,60 @@ def test_destaque_em_linha_de_grid_tambem_seleciona_linha_real(janela, qtbot) ->
     assert fake.highlights == [("shell1", True)]
     assert fake.select_rows == [("shell1", 2)]
     assert fake.select_nodes == []  # não é GuiTreeNode: select_node não é chamado
+
+
+def test_clique_direito_em_coluna_de_table_control_seleciona_coluna(janela, qtbot) -> None:
+    from src.core.analyser import ObjectNode
+
+    table_id = "/app/con[0]/ses[0]/wnd[0]/usr/tblT"
+    arvore = ObjectNode(
+        id="r", type="GuiSession",
+        children=[ObjectNode(id=table_id, type="GuiTableControl", children=[
+            ObjectNode(id=table_id, type="GuiTableColumns", children=[
+                ObjectNode(id=table_id, type="GuiTableColumn", name="TI_REGRAS-RECEPTOR",
+                           text="Receptor (TI_REGRAS-RECEPTOR)")
+            ])
+        ])],
+    )
+    fake = _FakeAnalyser(arvore)
+    aba = _preparar_analyser_tab(janela, fake)
+    aba.tree.expandAll()
+    aba.tree.doItemsLayout()
+    item = aba.tree.topLevelItem(0).child(0).child(0).child(0)
+
+    posicao = aba.tree.visualItemRect(item).center()
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao)
+    qtbot.mouseRelease(aba.tree.viewport(), Qt.MouseButton.RightButton, pos=posicao)
+
+    assert fake.select_columns == [(table_id, 0)]
+    # O ID da coluna é sintético e não pode disparar a inspeção pesada da tabela.
+    assert fake.inspections == []
+    # A tabela é sinalizada uma única vez; o release não dispara Visualize(False).
+    assert fake.highlights == [(table_id, True)]
+    assert fake.select_rows == []
+
+
+def test_destaque_em_celula_de_table_control_destaca_controle_real(janela, qtbot) -> None:
+    from src.core.analyser import ObjectNode
+
+    cell_id = "/app/con[0]/ses[0]/wnd[0]/usr/tblT/txtTI_REGRAS-BUKRS[0,3]"
+    arvore = ObjectNode(
+        id="r", type="GuiSession",
+        children=[ObjectNode(id=cell_id, type="GuiTextField", name="TI_REGRAS-BUKRS",
+                             text="[3] TI_REGRAS-BUKRS: Empresa")],
+    )
+    fake = _FakeAnalyser(arvore)
+    aba = _preparar_analyser_tab(janela, fake)
+    item = aba.tree.topLevelItem(0).child(0)
+    aba.tree.expandAll()
+    aba.tree.doItemsLayout()
+
+    qtbot.mousePress(aba.tree.viewport(), Qt.MouseButton.RightButton,
+                     pos=aba.tree.visualItemRect(item).center())
+
+    assert fake.highlights == [(cell_id, True)]
+    assert fake.select_rows == []
+    assert fake.select_nodes == []
 
 
 def test_colunas_do_analisador_iniciam_em_dois_tercos(janela) -> None:  # type: ignore[no-untyped-def]

@@ -23,12 +23,125 @@ from src.core.shell_handlers.calendar import GuiCalendarHandler
 from src.core.shell_handlers.generic import GuiShellGenerico
 from src.core.shell_handlers.grid_view import GuiGridViewHandler, ensure_grid_rows_loaded
 from src.core.shell_handlers.text_edit import GuiTextEditHandler
+from src.core.shell_handlers.table_control import GuiTableControlHandler
 from src.core.shell_handlers.toolbar import GuiToolbarHandler
 from src.core.shell_handlers.tree import GuiTreeHandler
 from tests.conftest import FakeComponent
 
 
+
+
+class FakeTableCell:
+    def __init__(self, cell_id: str, text: str = "", selected: bool = False) -> None:
+        self.Id = cell_id
+        self.Text = text
+        self.Selected = selected
+
+
+class FakeTable:
+    Type = "GuiTableControl"
+
+    def __init__(self, cells: list[FakeTableCell]) -> None:
+        self.Children = FakeCol(cells)
+
+
+def test_table_control_reconstroi_colunas_linhas_e_checkboxes() -> None:
+    prefix = "/app/con[0]/ses[0]/wnd[0]/usr/tblT/"
+    table = FakeTable([
+        FakeTableCell(prefix + "txtTI_REGRAS-BUKRS[0,0]", "1000"),
+        FakeTableCell(prefix + "txtTI_REGRAS-COD[1,0]", "ABC"),
+        FakeTableCell(prefix + "chkTI_REGRAS-ATIVO[2,0]", selected=True),
+        FakeTableCell(prefix + "txtTI_REGRAS-BUKRS[0,1]", "2000"),
+        FakeTableCell(prefix + "txtTI_REGRAS-COD[1,1]", "DEF"),
+        FakeTableCell(prefix + "chkTI_REGRAS-ATIVO[2,1]", selected=False),
+    ])
+
+    data = GuiTableControlHandler().inspecionar(table)
+
+    assert data["colunas"] == ["TI_REGRAS-BUKRS", "TI_REGRAS-COD", "TI_REGRAS-ATIVO"]
+    assert data["linhas"] == [
+        {"TI_REGRAS-BUKRS": "1000", "TI_REGRAS-COD": "ABC", "TI_REGRAS-ATIVO": "True"},
+        {"TI_REGRAS-BUKRS": "2000", "TI_REGRAS-COD": "DEF", "TI_REGRAS-ATIVO": "False"},
+    ]
+    assert [cell["tipo"] for cell in data["celulas"]] == ["GuiTextField", "GuiTextField", "GuiTextField", "GuiTextField", "GuiTextField", "GuiTextField"]
+    assert data["celulas"][0]["id"].endswith("txtTI_REGRAS-BUKRS[0,0]")
+    assert data["celulas"][0]["texto"] == "1000"
+
+
+
+class FakeScrollbar:
+    def __init__(self, table: Any, maximum: int, page_size: int) -> None:
+        self._table = table
+        self.Maximum = maximum
+        self.PageSize = page_size
+        self._position = 0
+        self.positions: list[int] = []
+
+    @property
+    def Position(self) -> int:
+        return self._position
+
+    @Position.setter
+    def Position(self, value: int) -> None:
+        self._position = min(max(0, int(value)), self.Maximum)
+        self.positions.append(self._position)
+        if hasattr(self._table, "_set_page"):
+            self._table._set_page(self._position)
+            return
+        self._table.Children = FakeCol([
+            FakeTableCell(
+                f"/app/con[0]/ses[0]/wnd[0]/usr/tblT/txtTI_REGRAS-BUKRS[0,{i}]",
+                str(1000 + self._position + i),
+            )
+            for i in range(self.PageSize)
+        ])
+
+
+def test_table_control_inspecionar_completo_paginas_todas_as_linhas() -> None:
+    table = FakeTable([])
+    table.RowCount = 5
+    table.VisibleRowCount = 2
+    scrollbar = FakeScrollbar(table, maximum=4, page_size=2)
+    table.VerticalScrollbar = scrollbar
+
+    data = GuiTableControlHandler().inspecionar_completo(table)
+
+    assert data["total"] == 5
+    assert [row["TI_REGRAS-BUKRS"] for row in data["linhas"]] == ["1000", "1001", "1002", "1003", "1004"]
+    assert scrollbar.Position == 0
+    assert len(scrollbar.positions) >= 2
+
 # --------------------------------------------------------------------------- #
+
+class FakePagedTable1147(FakeTable):
+    def __init__(self) -> None:
+        super().__init__([])
+        self.Id = "/app/con[0]/ses[0]/wnd[0]/usr/tblSAPMYS_MANUT_REGRAS_PEPTC_REGRAS"
+        self.RowCount = 1147
+        self.VisibleRowCount = 22
+        self.VerticalScrollbar = FakeScrollbar(self, 1146, 22)
+        self._set_page(0)
+
+    def _set_page(self, position: int) -> None:
+        start = position
+        indices = range(start, min(start + self.VisibleRowCount, self.RowCount))
+        self.Children = FakeCol([
+            FakeTableCell(f"{self.Id}/txtTI_REGRAS-BUKRS[0,{i - start}]", f"EMP-{i:04d}")
+            for i in indices
+        ])
+
+
+def test_table_control_1147_linhas_e_titulo_empresa() -> None:
+    table = FakePagedTable1147()
+    data = GuiTableControlHandler().inspecionar_completo(table)
+    assert data["total"] == 1147
+    assert data["capturadas"] == 1147
+    assert data["completa"] is True
+    assert data["titulos"] == ["Empresa"]
+    assert data["linhas"][0]["TI_REGRAS-BUKRS"] == "EMP-0000"
+    assert data["linhas"][-1]["TI_REGRAS-BUKRS"] == "EMP-1146"
+    assert table.VerticalScrollbar.Position == 0
+
 # Fakes de objetos COM
 # --------------------------------------------------------------------------- #
 class FakeCol:

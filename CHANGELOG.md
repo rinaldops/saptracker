@@ -42,6 +42,7 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   degradaria a gravação em tempo real.
 
 ### Corrigido
+- Cliques com o botão direito em `GuiTableColumn` não reinspecionam mais a tabela-pai antes de selecionar a coluna. Como a coluna é um nó sintético, o painel usa os dados já capturados; a seleção `Columns.ElementAt(i).Selected = True` e a piscada `Visualize(True)` continuam ocorrendo sem o atraso de vários segundos.
 - **Busca do Analisador (UI) continuava sem encontrar dados de grids com
   colunas incompletas, mesmo depois do `copy-table`.** `copy-table` era um
   comando isolado — não alimentava a árvore/busca que a aba Analisador (e
@@ -203,7 +204,7 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `Shift+F9` (parar gravação) e `Ctrl+C` (copiar ID, no Analyser).
 - Reconexão automática COM por até 30 s (`SapConnection.ensure_connected`).
 - Empacotamento standalone via PyInstaller: `sap_scripting_tool.spec` e
-  `scripts/build.py` (gera `SAPScriptingTool.exe`, onefile, sem console).
+  `scripts/build.py` (gera `SAPTracker.exe`, onefile, sem console).
 - Integração contínua (GitHub Actions): `ruff`, `mypy`, `pytest` em uma matriz
   Python 3.10–3.12, mais build da documentação Sphinx.
 - Documentação Sphinx (`docs/`) com autodoc, napoleon e `architecture.md`.

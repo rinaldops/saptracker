@@ -68,6 +68,39 @@ class FakeGridObj:
         return self._rows[r].get(col, "")
 
 
+
+
+class FakeTableCell:
+    def __init__(self, cell_id: str, text: str = "", selected: bool = False) -> None:
+        self.Id = cell_id
+        self.Type = "GuiCheckBox" if "/chk" in cell_id else "GuiTextField"
+        self.Text = text
+        self.Selected = selected
+
+
+class FakeTableObj:
+    Type = "GuiTableControl"
+    Id = "/app/con[0]/ses[0]/wnd[0]/usr/tblT"
+
+    def __init__(self) -> None:
+        prefix = self.Id + "/"
+        cells = [
+            FakeTableCell(prefix + "txtTI_REGRAS-BUKRS[0,0]", "1000"),
+            FakeTableCell(prefix + "txtTI_REGRAS-COD[1,0]", "ABC"),
+        ]
+        self.Children = FakeColl(cells)
+
+
+def test_arvore_lista_conteudo_do_table_control_e_valores_pesquisaveis() -> None:
+    root = Analyser(_session_com_grid(FakeTableObj())).build_tree()
+    table_node = root.children[0].children[0]
+
+    assert table_node.type == "GuiTableControl"
+    assert table_node.shell_supported is True
+    flattened = table_node.flatten()
+    assert any(n.text == "TI_REGRAS-BUKRS" for n in flattened)
+    assert any("1000" in n.text for n in flattened)
+
 # --------------------------------------------------------------------------- #
 # build_tree / ObjectNode
 # --------------------------------------------------------------------------- #
@@ -147,6 +180,25 @@ def _session_com_grid(grid: Any) -> Any:
     janela = FakeComponent(Id="wnd[0]", Type="GuiFrameWindow", Children=FakeColl([grid]))
     return FakeComponent(Id="ses[0]", Type="GuiSession", Children=FakeColl([janela]))
 
+
+def test_arvore_table_control_lista_colunas_e_celulas_reais() -> None:
+    analyser = Analyser(object())
+    cell_id = "/app/con[0]/ses[0]/wnd[0]/usr/tblT/txtTI_REGRAS-BUKRS[0,0]"
+    data = {
+        "colunas": ["TI_REGRAS-BUKRS"],
+        "titulos": ["Empresa"],
+        "celulas": [{"id": cell_id, "tipo": "GuiTextField", "coluna": 0,
+                     "linha": 0, "nome": "TI_REGRAS-BUKRS", "texto": "1000"}],
+    }
+    nodes = analyser._table_nodes(data, "table")
+    columns = next(node for node in nodes if node.type == "GuiTableColumns")
+    cells = next(node for node in nodes if node.type == "GuiTableCells")
+
+    assert columns.children[0].text == "Empresa (TI_REGRAS-BUKRS)"
+    assert [node.type for node in cells.children] == ["GuiTextField"]
+    assert cells.children[0].id == cell_id
+    assert "1000" in cells.children[0].text
+    assert not any(node.type in {"GuiTableRows", "GuiTableRow"} for node in nodes + cells.children)
 
 def test_arvore_lista_conteudo_do_grid() -> None:
     grid = FakeGridObj()
@@ -599,3 +651,43 @@ def test_build_tree_sem_full_grid_data_mantem_aviso_e_nao_toca_clipboard(
     grid_node = root.children[0].children[0]
     assert len(_avisos_de_colunas(grid_node)) == 1
     assert clipboard["texto"] is None  # nada foi copiado
+
+class FakeSelectableTable:
+    Type = "GuiTableControl"
+    Id = "table"
+    VisibleRowCount = 22
+
+    def __init__(self) -> None:
+        self.VerticalScrollbar = type("Scrollbar", (), {"Position": 10})()
+        self.rows = [type("TableRow", (), {"Selected": False})() for _ in range(40)]
+
+    def GetAbsoluteRow(self, index: int) -> Any:
+        return self.rows[index]
+
+
+def test_select_table_column_usa_coluna_por_indice() -> None:
+    from tests.test_shell_handlers import FakeCol
+
+    table = FakeTableObj()
+    table.Columns = FakeCol([type("Column", (), {"Selected": False})() for _ in range(3)])
+    analyser = Analyser(FakeSessionFind({table.Id: table}))
+
+    assert analyser.select_table_column(table.Id, 1) is True
+    assert table.Columns.ElementAt(0).Selected is False
+    assert table.Columns.ElementAt(1).Selected is True
+    assert table.Columns.ElementAt(2).Selected is False
+
+
+def test_build_tree_table_control_nao_pagina_com_full_grid_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    table = FakeTableObj()
+    def nao_deve_ser_chamado(obj: Any) -> dict[str, Any]:
+        raise AssertionError("GuiTableControl não deve ser paginado na análise")
+    monkeypatch.setattr(
+        "src.core.shell_handlers.table_control.GuiTableControlHandler.inspecionar_completo",
+        nao_deve_ser_chamado,
+    )
+
+    root = Analyser(_session_com_grid(table)).build_tree(full_grid_data=True)
+    assert any("1000" in node.text for node in root.flatten())

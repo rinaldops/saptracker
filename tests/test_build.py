@@ -19,7 +19,7 @@ def test_spec_existe_e_referencia_main() -> None:
     assert build.SPEC_FILE.name == "sap_scripting_tool.spec"
     conteudo = build.SPEC_FILE.read_text(encoding="utf-8")
     assert "src" in conteudo and "main.py" in conteudo
-    assert "SAPScriptingTool" in conteudo
+    assert "name=\"SAPTracker\"" in conteudo
 
 
 def test_build_aborta_sem_spec(monkeypatch, tmp_path) -> None:  # type: ignore[no-untyped-def]

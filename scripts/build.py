@@ -24,7 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SPEC_FILE = PROJECT_ROOT / "sap_scripting_tool.spec"
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
-EXE_NAME = "SAPScriptingTool.exe"
+EXE_NAME = "SAPTracker.exe"
 
 
 def current_arch() -> str:

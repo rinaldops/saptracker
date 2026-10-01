@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec — SAP GUI Scripting Tool (executável standalone Windows).
 
-Gera um único ``SAPScriptingTool.exe`` (onefile, sem console). Inclui os
+Gera um único ``SAPTracker.exe`` (onefile, sem console). Inclui os
 módulos do pacote ``src`` e as dependências COM (pywin32) e de UI
 (PyQt6 + QScintilla) que o PyInstaller nem sempre detecta automaticamente.
 
@@ -54,7 +54,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="SAPScriptingTool",
+    name="SAPTracker",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -84,7 +84,7 @@ Gere um executável que roda sem instalação de Python:
 python scripts/build.py
 ```
 
-O binário é produzido em `dist/SAPScriptingTool.exe`. A arquitetura (x86/x64)
+O binário é produzido em `dist/SAPTracker.exe`. A arquitetura (x86/x64)
 acompanha a do interpretador Python usado no build.
 
 ## Primeiros passos
@@ -150,6 +150,8 @@ agregador `app-devs`).
 | `select-node ID CHAVE` | Seleciona um nó de `GuiTree` (`SelectNode`) | Seleção/scroll, na tela |
 | `select-row ID LINHA` | Seleciona uma linha de `GuiGridView` (`SetCurrentCell`/`SelectedRows`) | Seleção/scroll, na tela |
 | `copy-table ID` | Copia a grade inteira de um `GuiGridView` via clipboard | Seleção na tela + clipboard (restaurado ao final) |
+
+Para GuiTableControl, a análise normal captura somente as células vivas na viewport atual e os nomes das colunas. Ela não pagina a tabela. A captura completa é uma operação explícita documentada em [docs/gui-table-control-paginacao.md](docs/gui-table-control-paginacao.md).
 
 Todos aceitam `--connection N --session N` (padrão `0`/`0`). Erros de conexão
 saem com código `2` e mensagem no stderr.

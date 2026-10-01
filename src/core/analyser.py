@@ -9,6 +9,7 @@ delegando sua introspecção ao handler apropriado. Também oferece o *highlight
 from __future__ import annotations
 
 from collections.abc import Callable
+from time import perf_counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -250,6 +251,7 @@ class Analyser:
             "GuiTextEdit",
             "GuiCalendar",
             "GuiToolbarControl",
+            "GuiTableControl",
         ):
             return True
         # GuiShell genuíno expõe SubType.
@@ -268,6 +270,8 @@ class Analyser:
         """
         handler = get_handler_for_type(node.type)
         try:
+            # GuiTableControl representa apenas a viewport atual em Children.
+            # A paginação é uma operação explícita, nunca parte da análise normal.
             data = handler.inspecionar(obj)
             if (
                 full_grid_data
@@ -293,6 +297,8 @@ class Analyser:
         Os nós sintéticos herdam o ``id`` do shell pai, de modo que selecioná-los
         ainda exibe os detalhes completos do controle no painel lateral.
         """
+        if shell_type == "GuiTableControl":
+            return self._table_nodes(data, parent_id)
         if shell_type == "GuiGridView":
             return self._grid_nodes(data, parent_id)
         if shell_type == "GuiTree":
@@ -376,6 +382,37 @@ class Analyser:
             nodes.append(grupo)
         return nodes
 
+    def _table_nodes(self, data: dict[str, Any], parent_id: str) -> list[ObjectNode]:
+        """Lista colunas e controles reais da viewport de um Table Control."""
+        columns = [str(c) for c in data.get("colunas", [])]
+        titles = [str(t) for t in data.get("titulos", [])]
+        nodes: list[ObjectNode] = []
+        if columns:
+            group = ObjectNode(id=parent_id, type="GuiTableColumns", text=f"Colunas ({len(columns)})")
+            group.children = [
+                ObjectNode(
+                    id=parent_id, type="GuiTableColumn", name=c,
+                    text=f"{titles[i]} ({c})" if i < len(titles) and titles[i] else c,
+                )
+                for i, c in enumerate(columns)
+            ]
+            nodes.append(group)
+        cells = data.get("celulas", [])
+        if cells:
+            group = ObjectNode(id=parent_id, type="GuiTableCells", text=f"Células visíveis ({len(cells)})")
+            for cell in cells:
+                column = int(cell.get("coluna", 0))
+                name = str(cell.get("nome", ""))
+                value = str(cell.get("texto", ""))
+                row = int(cell.get("linha", 0))
+                group.children.append(ObjectNode(
+                    id=str(cell.get("id", "")) or parent_id,
+                    type=str(cell.get("tipo", "GuiTextField")),
+                    name=name,
+                    text=f"[{row}] {name}: {value}",
+                ))
+            nodes.append(group)
+        return nodes
     def _tree_nodes(self, data: dict[str, Any], parent_id: str) -> list[ObjectNode]:
         """Reconstrói a hierarquia de nós de um GuiTree a partir das chaves.
 
@@ -453,11 +490,15 @@ class Analyser:
         Returns:
             ``True`` se o comando foi enviado com sucesso.
         """
+        inicio = perf_counter()
         obj = self.find_by_id(obj_id)
+        encontrou = obj is not None
         if obj is None:
+            logger.info("highlight id=%s on=%s find_ms=%.1f result=False", obj_id, on, (perf_counter() - inicio) * 1000)
             return False
-        result = safe_com_call(lambda: obj.Visualize(on))
-        return result is not None
+        resultado = safe_com_call(lambda: obj.Visualize(on))
+        logger.info("highlight id=%s on=%s find_ms=%.1f total_ms=%.1f result=%s", obj_id, on, 0.0, (perf_counter() - inicio) * 1000, resultado is not None)
+        return resultado is not None
 
     # ------------------------------------------------------------------ #
     # Seleção de nó (GuiTree)
@@ -505,6 +546,24 @@ class Analyser:
         safe_com_call(lambda: setattr(obj, "SelectedRows", str(row)))
         atual = safe_get(obj, "CurrentCellRow", -1)
         return bool(atual == row)
+    def select_table_column(self, obj_id: str, column: int) -> bool:
+        """Seleciona uma coluna de ``GuiTableControl`` pelo índice SAP."""
+        if column < 0:
+            return False
+        inicio = perf_counter()
+        table = self.find_by_id(obj_id)
+        if table is None:
+            logger.info("select_table_column id=%s col=%s total_ms=%.1f result=False", obj_id, column, (perf_counter() - inicio) * 1000)
+            return False
+        columns = safe_get(table, "Columns")
+        selected = com_item(columns, column)
+        if selected is None:
+            logger.info("select_table_column id=%s col=%s total_ms=%.1f result=False", obj_id, column, (perf_counter() - inicio) * 1000)
+            return False
+        safe_com_call(lambda: setattr(selected, "Selected", True))
+        result = bool(safe_get(selected, "Selected", False))
+        logger.info("select_table_column id=%s col=%s total_ms=%.1f result=%s", obj_id, column, (perf_counter() - inicio) * 1000, result)
+        return result
 
     # ------------------------------------------------------------------ #
     # Cópia de tabela via clipboard (fallback para colunas não enumeráveis)

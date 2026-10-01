@@ -295,10 +295,30 @@ class AnalyserTab(QWidget):
     def _show_details(self) -> None:
         if self._analyser is None:
             return
-        obj_id = self._selected_id()
+        items = self.tree.selectedItems()
+        if not items:
+            return
+        item = items[0]
+        obj_id = str(item.data(0, _ID_ROLE) or "")
         if not obj_id:
             return
-        detalhes = self._analyser.inspect(obj_id)
+
+        # GuiTableColumn é um nó sintético: seu ID é o da tabela-pai.
+        # Inspecionar esse ID aqui relê todos os filhos visíveis da tabela e
+        # bloqueia a UI por vários segundos antes do clique direito chegar ao
+        # fluxo de seleção. Os dados necessários para a coluna já estão no
+        # item, portanto não há motivo para uma segunda chamada COM pesada.
+        tipo = str(item.data(0, _TYPE_ROLE) or "")
+        if tipo == "GuiTableColumn":
+            detalhes = {
+                "id": obj_id,
+                "type": tipo,
+                "name": str(item.data(0, _NAME_ROLE) or ""),
+                "text": item.text(0),
+                "synthetic": True,
+            }
+        else:
+            detalhes = self._analyser.inspect(obj_id)
         self.details.setPlainText(json.dumps(detalhes, indent=2, ensure_ascii=False, default=str))
 
     # ------------------------------------------------------------------ #
@@ -382,12 +402,25 @@ class AnalyserTab(QWidget):
         if self._highlighted_id:
             self._analyser.highlight(self._highlighted_id, on=False)
             self._highlighted_id = ""
+
+        tipo = item.data(0, _TYPE_ROLE)
+        nome = str(item.data(0, _NAME_ROLE) or "")
+        # A coluna é sintética, mas o seu ID é o da tabela. Visualize nessa
+        # tabela é uma operação síncrona e a tabela já faz a própria piscada;
+        # não a registre como destaque persistente, evitando uma segunda
+        # chamada Visualize(False) no mouse-release.
+        if tipo == "GuiTableColumn" and item.parent() is not None:
+            indice = item.parent().indexOfChild(item)
+            selecionado = self._analyser.select_table_column(obj_id, indice)
+            self._analyser.highlight(obj_id, on=True)
+            if selecionado:
+                self._ctx.statusMessage.emit(f"Coluna {indice + 1} selecionada em {obj_id}.")
+            return
+
         destacado = self._analyser.highlight(obj_id, on=True)
         if destacado:
             self._highlighted_id = obj_id
 
-        tipo = item.data(0, _TYPE_ROLE)
-        nome = str(item.data(0, _NAME_ROLE) or "")
         selecionado = False
         detalhe = ""
         if tipo == "GuiTreeNode" and nome:

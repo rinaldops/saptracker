@@ -20,6 +20,7 @@ from src.core.shell_handlers.calendar import GuiCalendarHandler
 from src.core.shell_handlers.generic import GuiShellGenerico
 from src.core.shell_handlers.grid_view import GuiGridViewHandler
 from src.core.shell_handlers.text_edit import GuiTextEditHandler
+from src.core.shell_handlers.table_control import GuiTableControlHandler
 from src.core.shell_handlers.toolbar import GuiToolbarHandler
 from src.core.shell_handlers.tree import GuiTreeHandler
 from src.utils.logger import get_logger
@@ -29,6 +30,7 @@ logger = get_logger(__name__)
 #: Registry tipo SAP -> instância de handler (handlers são stateless/reusáveis).
 HANDLERS: dict[str, GuiShellHandler] = {
     "GuiGridView": GuiGridViewHandler(),
+    "GuiTableControl": GuiTableControlHandler(),
     "GuiTree": GuiTreeHandler(),
     "GuiTextEdit": GuiTextEditHandler(),
     "GuiCalendar": GuiCalendarHandler(),

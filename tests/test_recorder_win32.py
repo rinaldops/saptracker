@@ -125,7 +125,9 @@ def test_scan_captura_dialogo_do_so_sem_modal_sap(monkeypatch: Any) -> None:
         rec, "_capture", lambda h: dialog_to_acao("Salvar como", [], "Button1")
     )
     assert rec.scan_once() == []      # adia
-    assert len(rec.scan_once()) == 1  # decide: sem modal SAP → captura
+    assert rec.scan_once() == []      # aguarda o nome final
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [])
+    assert len(rec.scan_once()) == 1  # fechamento emite a última leitura
     assert capturadas[0].args["title"] == "Salvar como"
 
 
@@ -228,6 +230,25 @@ def test_enumerate_dialogs_filtra_classe_32770(monkeypatch: Any) -> None:
     monkeypatch.setitem(sys.modules, "win32gui", _FakeWin32Gui())
     rec = Win32Recorder(sink=lambda _a: None)
     assert rec._enumerate_dialogs() == [100]  # ignora a janela Notepad
+
+
+def test_save_as_so_emite_apos_fechar_com_ultimo_nome(monkeypatch: Any) -> None:
+    capturadas: list[Any] = []
+    rec = Win32Recorder(sink=capturadas.append)
+    estados = iter(["", "C:\\saida.txt"])
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [100])
+    monkeypatch.setattr(rec, "_title_safe", lambda _h: "Salvar como")
+    monkeypatch.setattr(
+        rec,
+        "_capture",
+        lambda _h: dialog_to_acao("Salvar como", [("Edit1", next(estados))], "Button3"),
+    )
+    assert rec.scan_once() == []
+    assert rec.scan_once() == []
+    monkeypatch.setattr(rec, "_enumerate_dialogs", lambda: [])
+    result = rec.scan_once()
+    assert len(result) == 1
+    assert result[0].args["controls"][0]["text"] == "C:\\saida.txt"
 
 
 def test_capture_extrai_titulo_edits_e_botao(monkeypatch: Any) -> None:

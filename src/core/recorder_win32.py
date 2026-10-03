@@ -30,7 +30,10 @@ ActionSink = Callable[[Acao], None]
 DIALOG_CLASS = "#32770"
 
 #: Intervalo padrão entre varreduras de janelas nativas (segundos).
-DEFAULT_SCAN_INTERVAL = 0.4
+# Diálogos "Salvar como" são interativos: o usuário pode preencher o nome e
+# confirmar antes do próximo ciclo. Um intervalo de 400 ms perde esse estado.
+# 50 ms mantém a captura confiável sem alterar o polling SAP/GuiShell.
+DEFAULT_SCAN_INTERVAL = 0.05
 
 #: Títulos de janelas Win32 que devem ser IGNORADOS pelo recorder.
 #: Diálogos de erro interno do SAP (sapfewdbg, crash handlers, Windows Script
@@ -144,6 +147,10 @@ class Win32Recorder:
         #: Diálogos vistos UMA vez, aguardando 1 ciclo antes da decisão — dá
         #: tempo para a árvore COM refletir o ``wnd[N]`` de um modal SAP (corrida).
         self._pending: set[int] = set()
+        #: Estado mais recente dos diálogos ``Salvar como``. Esses diálogos
+        #: precisam ser emitidos somente ao fechar: o nome do arquivo costuma
+        #: ser digitado depois que a janela é detectada.
+        self._deferred: dict[int, Acao] = {}
 
     # ------------------------------------------------------------------ #
     @property
@@ -163,6 +170,7 @@ class Win32Recorder:
         pre_existentes = self._enumerate_dialogs()
         self._seen = set(pre_existentes)
         self._pending = set()
+        self._deferred = {}
         if pre_existentes:
             titulos = [self._title_safe(h) for h in pre_existentes]
             logger.debug(
@@ -204,6 +212,12 @@ class Win32Recorder:
         # caso o mesmo tipo de diálogo reabra com handle reciclado.
         self._seen &= atuais
         self._pending &= atuais
+        # O desaparecimento confirma que o usuário concluiu o diálogo. Só
+        # então emitimos a última leitura, já contendo o nome digitado.
+        for hwnd in set(self._deferred) - atuais:
+            acao = self._deferred.pop(hwnd)
+            detectadas.append(acao)
+            self._sink(acao)
         for hwnd in hwnds:
             if hwnd in self._seen:
                 continue
@@ -240,6 +254,14 @@ class Win32Recorder:
                 continue
             acao = self._capture(hwnd)
             if acao is not None:
+                if titulo.casefold() in {"salvar como", "save as"}:
+                    self._deferred[hwnd] = acao
+                    logger.debug(
+                        "Win32Recorder: diálogo '%s' aguardando fechamento para "
+                        "capturar o nome final.",
+                        titulo,
+                    )
+                    continue
                 logger.info(
                     "Win32Recorder: diálogo '%s' capturado (%d controle(s)).",
                     acao.args.get("title", "?"),
@@ -247,6 +269,16 @@ class Win32Recorder:
                 )
                 detectadas.append(acao)
                 self._sink(acao)
+        # Atualiza o estado dos diálogos adiados a cada ciclo, após a digitação.
+        for hwnd in set(self._deferred) & atuais:
+            acao = self._capture(hwnd)
+            if acao is not None:
+                self._deferred[hwnd] = acao
+                logger.debug(
+                    "Win32Recorder: estado de '%s' atualizado: %s",
+                    self._title_safe(hwnd),
+                    acao.args.get("controls", []),
+                )
         return detectadas
 
     # ------------------------------------------------------------------ #
@@ -444,9 +476,22 @@ class Win32Recorder:
             for i, cls in enumerate(child_classes)
             if "Edit" in cls
         ]
-        # Botão padrão: primeira classe Button com texto (heurística).
+        # Prefere o botão de confirmação pelo rótulo. Na janela padrão do
+        # Windows, ``Button1`` pode ser "Abrir como somente leitura" e não
+        # "Salvar".
         button = next(
-            (nn[i] for i, cls in enumerate(child_classes) if "Button" in cls),
+            (
+                nn[i]
+                for i, cls in enumerate(child_classes)
+                if "Button" in cls
+                and child_texts[i].strip().replace("&", "").casefold()
+                in {"salvar", "save", "ok", "abrir"}
+            ),
             "",
         )
+        if not button:
+            button = next(
+                (nn[i] for i, cls in enumerate(child_classes) if "Button" in cls),
+                "",
+            )
         return dialog_to_acao(title, controls, button)

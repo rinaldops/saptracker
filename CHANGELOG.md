@@ -10,7 +10,7 @@ adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - **CLI headless (`sap-scripting-tool-cli`).** Comandos `snapshot`, `inspect`,
   `highlight`, `select-node` e `select-row` expõem o `Analyser` sem abrir a
   interface Qt, para uso por agentes de IA/automação (ver skill
-  `app-devs/_skills/sap-gui-snapshot`). `select-node`/`select-row` selecionam
+  `app-devs/skills/sap-gui-snapshot`). `select-node`/`select-row` selecionam
   um nó de `GuiTree` pela chave ou uma linha de `GuiGridView` pelo índice —
   o equivalente real da API a "destacar" um nó/linha, já que nenhum dos dois
   controles expõe `Visualize` por nó/linha (só o controle inteiro).

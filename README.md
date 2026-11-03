@@ -139,7 +139,7 @@ Além da interface Qt, `pyproject.toml` registra o script de console
 `sap-scripting-tool-cli` — reaproveita 100% do `Analyser`/`SapConnection` já
 usados pela UI, sem abrir nenhuma janela. Pensado para agentes de IA lerem o
 estado da tela do SAP GUI como JSON estruturado em vez de captura de tela (ver
-a skill [`sap-gui-snapshot`](../_skills/sap-gui-snapshot/SKILL.md), no
+a skill [`sap-gui-snapshot`](../skills/sap-gui-snapshot/SKILL.md), no
 agregador `app-devs`).
 
 | Comando | Faz | Efeitos colaterais |

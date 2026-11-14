@@ -11,12 +11,12 @@ usam fakes COM; `python -m pytest -m "not sap_live"` seleciona a validação
 local sem sessão SAP. O metadado Homepage/Issues do pyproject ainda contém
 URLs example; use o repositório do projeto indicado nesta página para suporte.
 
-Esta revisão (2026-09-30) validou a CLI headless contra um SAP GUI real
-(Project Builder/cProjects) — ver [CHANGELOG](CHANGELOG.md) para o histórico
-completo e a seção "Limitações conhecidas" abaixo para o que foi descoberto
-no processo.
+Os contratos de gravação e as lições de integração estão em
+[architecture.md](docs/architecture.md#contratos-de-gravacao-e-manutencao).
+Evidências históricas não substituem validação atual no SAP; esta curadoria
+é documental e não executa testes nem operações de produção.
 
-[![Versão](https://img.shields.io/badge/vers%C3%A3o-1.3.0-2E75B6)](CHANGELOG.md)
+[![Versão](https://img.shields.io/badge/vers%C3%A3o-1.3.0-2E75B6)](pyproject.toml)
 [![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-375623)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-1F3864)](pyproject.toml)
 [![CI](https://github.com/rinaldops/saptracker/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
@@ -35,7 +35,7 @@ resolve exatamente as lacunas que ele nunca cobriu:
 | Analisador de objetos SAP normais | ✅ | ✅ |
 | Analisador de controles `GuiShell`/`GuiTree` | ❌ | ✅ Handler especializado |
 | Gravador por eventos COM | ✅ | ✅ |
-| Gravador de interações com `GuiShell` | ❌ | ✅ Polling por *snapshot* |
+| Gravador de interações com `GuiShell` | ❌ | ✅ COM primário; *snapshot* como fallback |
 | Captura de diálogos Win32 nativos | ❌ | ✅ *Thread* `win32gui` + AutoItX |
 | Código híbrido SAP + Win32 | ❌ | ✅ Intercalado automaticamente |
 | Geração de código | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java | ✅ VBA, Python, VBScript, PowerShell, AutoIt, Java |
@@ -49,8 +49,9 @@ resolve exatamente as lacunas que ele nunca cobriu:
 - **SAP GUI Scripting habilitado** no servidor e no cliente
   (`Opções → Acessibilidade & Scripting → Scripting`).
 - **Python 3.10+** (para rodar a partir do código-fonte).
-- **AutoItX3** registrado (`AutoItX3.dll`) — necessário apenas para gravar e
-  executar a automação de diálogos Win32 nativos.
+- **AutoItX3 COM** registrado (`AutoItX3.dll`) para a integração do gravador
+  com diálogos Win32 nativos. A alternativa manual via DLL/`ctypes` não exige
+  registro COM; ver [exportação nativa](docs/architecture.md#exportacao-textedit-autoitx).
 
 > A ferramenta opera exclusivamente com o SAP GUI for Windows. Não há suporte a
 > SAP Web GUI, SAP Fiori ou plataformas não-Windows.
@@ -130,8 +131,10 @@ introspecção do conteúdo interno e detecta mudanças para o Gravador:
 | `GuiToolbarControl` | Botões disponíveis, *tooltips* e estado de habilitação |
 | *Demais tipos* | *Fallback* genérico: ID, tipo e *SubType* (sem introspecção de conteúdo) |
 
-Como o SAP **não emite eventos COM para `GuiShell`** (*SAP Note 587202*), esses
-controles são gravados por *polling* de *snapshots* em vez de *event listeners*.
+O motor COM primário usa `ISapSessionEvents`, `Record = True` e o
+`CommandArray` oficial, incluindo ações transitórias de `GuiShell`.
+O polling por snapshots é fallback quando COM não está disponível; não é
+a única via atual. Ver [contratos de gravação](docs/architecture.md#contratos-de-gravacao-e-manutencao).
 
 ## CLI headless (para IA/automação)
 
@@ -151,7 +154,7 @@ agregador `app-devs`).
 | `select-row ID LINHA` | Seleciona uma linha de `GuiGridView` (`SetCurrentCell`/`SelectedRows`) | Seleção/scroll, na tela |
 | `copy-table ID` | Copia a grade inteira de um `GuiGridView` via clipboard | Seleção na tela + clipboard (restaurado ao final) |
 
-Para GuiTableControl, a análise normal captura somente as células vivas na viewport atual e os nomes das colunas. Ela não pagina a tabela. A captura completa é uma operação explícita documentada em [docs/gui-table-control-paginacao.md](docs/gui-table-control-paginacao.md).
+Para GuiTableControl, a análise normal captura somente as células vivas na viewport atual e os nomes das colunas. Ela não pagina a tabela. A captura completa é uma operação explícita documentada em [seleção e paginação](docs/architecture.md#gui-table-control-paginacao).
 
 Todos aceitam `--connection N --session N` (padrão `0`/`0`). Erros de conexão
 saem com código `2` e mensagem no stderr.
@@ -219,7 +222,9 @@ com o título e a classe da janela e *placeholders* para os valores dos campos.
 
 PRs são bem-vindos. O CI (GitHub Actions) precisa passar em `ruff` (lint),
 `mypy` (tipos) e `pytest` (testes); toda nova funcionalidade deve trazer
-*docstrings* e uma entrada no [CHANGELOG.md](CHANGELOG.md).
+*docstrings*, testes de contrato e atualização dos guias canônicos
+([arquitetura](docs/architecture.md) e README). Versionamento semântico fica
+nos metadados do projeto; não recriar um diário documental por execução.
 
 ### Adicionar um novo handler GuiShell
 

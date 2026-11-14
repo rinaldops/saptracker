@@ -199,3 +199,126 @@ aviso em vez de descartar em silêncio uma thread que não encerrou a tempo.
 não é determinístico — vale isolar explicitamente qualquer chamada que possa
 ter sucesso contra um recurso externo real, mesmo quando o *happy path* do
 teste não pressupõe esse recurso.
+
+<a id="contratos-de-gravacao-e-manutencao"></a>
+## Contratos de gravação e manutenção
+
+Estes contratos complementam os motores de gravação e a geração de código;
+não são um registro de releases nem evidência de teste atual no SAP.
+
+- **CommandArray:** tratar `str`, `bytes`, números e `bool` como argumentos
+  atômicos, não coleções. Iterar uma string já truncou textos ao primeiro
+  caractere. Aceitar métodos sem argumento (`("M", "nome")`, dois elementos),
+  sem exigir um terceiro; ignorar `caretPosition`, que só movimenta o cursor.
+- **Deduplicação:** colapsar somente ações consecutivas de efeito idêntico,
+  normalizando `property_set` com `set_text`, `set_combo_key` e `set_checkbox`.
+  Não eliminar ações iguais separadas por outra ação relevante. COM e polling
+  não devem gravar simultaneamente os mesmos campos/controles.
+- **Identidade e contexto:** `Acao.obj_id` interno permanece absoluto para
+  consulta/deduplicação/destaque. Só a renderização remove o prefixo de sessão,
+  gerando IDs relativos a `wnd[N]`. `Acao.label` preserva rótulos de aba/menu;
+  navegação por okcd, troca de aba e menu viram comentários neutros de linguagem.
+- **Resolução GuiShell:** `Type == "GuiShell"` pode ter `SubType` sem prefixo
+  `Gui` (`Tree`, `GridView`); usar `normalize_shell_type` no Analyser e no
+  registry, sem cair silenciosamente no handler genérico. Conteúdo aparece em
+  nós-filhos pesquisáveis; a árvore amostra até 50 itens por shell, enquanto
+  o painel/`inspect` expõe os detalhes disponíveis. Isso não remove lazy-load.
+- **Referência da API e notas:** manter busca por objetos e múltiplos exemplos
+  rotulados em `ApiEntry.examples`, com escape HTML dos blocos de código.
+  A aba Notas permite copiar/abrir/salvar anotações; não guardar segredos.
+- **Diagnóstico:** arquivo DEBUG em
+  `%LOCALAPPDATA%/SAPScriptingTool/logs/sap_tool.log`; nível do console via
+  `SAPTOOL_LOG_LEVEL`. Logs do Analyser registram Type/SubType/resolução,
+  suporte, resumo da árvore e contagem de conteúdo. Logs podem conter dados
+  corporativos: guardar localmente e revisar antes de compartilhar.
+- **Manutenção:** preservar thread safety, isolamento de recursos externos nos
+  testes e os limites de introspecção descritos acima. Usar versionamento
+  semântico nos metadados; atualizar README/arquitetura e testes/docstrings
+  quando um contrato mudar, em vez de recriar changelog narrativo.
+
+## Exportacao TextEdit AutoItX
+
+### Quando usar e fronteira com GAPS
+
+Na CJ20N/LTCT o editor aparece como `GuiShell`, `SubType = TextEdit`, e usa
+janela nativa classe `SAP TextEdit`. IDs que incluem subscreens/programas
+variam com a tela e não devem ser tratados como contrato universal.
+A [captura vigente da GAPS](../../GAPS/docs/TEXTOS-E-DADOS.md)
+lê `GuiTextEdit.Text` diretamente para `TEXTO LONGO (CL)`, **sem TXT nem AutoIt**.
+A sequência abaixo preserva a opção de exportação nativa/legada, não uma
+melhoria pendente obrigatória nem o fluxo vigente da GAPS.
+
+### Sequência e falhas conhecidas
+
+1. Localizar o editor nativo e executar clique direito em `SAP TextEdit`.
+   O menu contextual é Win32, normalmente classe `#32768`, não botão SAP.
+2. Selecionar a última opção com `End`; aguardar 0,3–0,5 s e enviar `Enter`
+   em **chamada separada**. `End`+`Enter` juntos falharam; contagem fixa de
+   `Down` não é resiliente a release, idioma ou permissões.
+3. Aguardar o diálogo **Salvar como**; preencher explicitamente `Edit1` com
+   o destino autorizado. `Button2` é ClassNN observado, não garantia geral;
+   preferir localizar o botão pelo texto `Salvar`/`Save` quando disponível.
+4. Confirmar existência e tamanho do arquivo por polling com timeout.
+   Retorno do clique não prova gravação concluída. Registrar as etapas editor,
+   menu, End, Enter, diálogo, preenchimento, salvamento e verificação.
+
+`SetSelectionIndexes` só posiciona o cursor; não exporta. Procurar o menu na
+árvore SAP ou depender de `ShowContextMenu()` não foi confiável. A edição de
+`Edit1` ocorre fora da árvore SAP, portanto o gravador COM não captura o caminho
+literal digitado; a reprodução deve defini-lo, não reutilizar o caminho do
+operador. Captura COM SAP e detecção Win32 permanecem separadas; adiar a
+classificação do diálogo evita confundir modais SAP com janelas externas.
+
+### AutoItX sem registro COM
+
+A alternativa manual usa `ctypes.WinDLL` com DLL AutoItX local e arquitetura
+igual à do Python/processo hospedeiro (por exemplo x64 com x64), inicializada
+por `AU3_Init` e assinaturas corretas das funções `AU3_Send`,
+`AU3_ControlSetText` e `AU3_ControlClick`. Essa alternativa **não exige registro
+COM nem instalação administrativa**; não confundi-la com a integração COM do
+gravador. O caminho da DLL e do arquivo devem ser configuráveis e autorizados,
+sem caminhos pessoais/credenciais em fontes versionadas. Arquivos locais ficam
+em `tmp/` do projeto. Os cuidados de handle, `ATL:SAP TextEditBody`, ambiguidade
+do ID numérico 1 e encoding do legado estão no canônico GAPS vinculado acima.
+
+## Gui Table Control Paginacao
+
+### Seleção de colunas sem recaptura
+
+`GuiTableColumn` é um nó sintético com o ID da tabela-pai. Reinspecionar
+`inspect(table_id)` ao selecioná-lo relia filhos e já causou latência de cerca
+de 10 s, embora `Columns.ElementAt(i).Selected = True` e `Visualize(True)`
+respondessem rapidamente. Usar nome/texto já capturados para os detalhes do
+nó sintético; preservar a seleção COM e a piscada, removendo o destaque ao
+soltar o botão. Separar captura, detalhes e seleção: uma ação de seleção não
+deve disparar nova captura completa.
+
+### Viewport e captura completa explícita
+
+`GuiTableControlHandler.inspecionar()` lê apenas células vivas da viewport e
+nomes/títulos disponíveis. Não pagina. `inspecionar_completo()` é opt-in e usa
+`capture_table_pages` (`src/core/table_capture.py`), também reutilizado por
+`scripts/export_ysregraspep.py`. Uma viewport histórica de 22 linhas não é
+constante universal; o algoritmo usa `VisibleRowCount`/`RowCount` e limite da
+barra para definir os passos.
+
+- A captura completa rola páginas e reobtém a tabela via `session.FindById`
+  quando possível. O leitor prefere `SPXLSAP.GuiMainWindow.GuiTable`; se não
+  puder usá-lo, recorre ao COM direto. `GetCell` pode falhar durante a troca
+  assíncrona de viewport: há até três tentativas por célula; quando não existe
+  `GetCell`, a leitura usa `Children` da página disponível.
+- A chave física `__sap_absolute_row` evita dupla contagem por sobreposição
+  de páginas, **preservando linhas de conteúdo idêntico e linhas vazias**.
+  Não deduplicar conteúdo de negócio; a chave auxiliar sai do resultado final.
+- `paginas` registra quantidades físicas por página; `linhas_acumuladas` é a
+  soma antes da deduplicação, `capturadas` é o total final e `completa` compara
+  esse total com `RowCount`. Captura parcial não equivale a tabela vazia nem
+  prova completude de dados; examinar esses indicadores e mensagens.
+- **Efeito visual:** a captura muda a posição da tabela. No caminho SPXLSAP,
+  não restaurar a scrollbar COM antiga: essa escrita já provocou queda do
+  SAP GUI. No fallback COM/fakes a restauração é best-effort. Não prometer
+  que a tela ficará intacta nem ativar paginação completa no polling.
+
+Testes com fakes exercitam contratos locais, não certificam o SAP. Operação
+real requer **produção autorizada**, conexão/sessão e destino conferidos; a
+consolidação documental não executa captura, exportação nem validação live.

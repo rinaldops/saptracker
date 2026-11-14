@@ -39,3 +39,6 @@ doc/_extract/
 # Local notes / secrets
 *.local
 secrets.*
+
+# Curadoria e temporários locais
+tmp/
